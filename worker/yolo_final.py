@@ -1,82 +1,114 @@
 import cv2
 import math
+import torch
+from pathlib import Path
+import sys
 from ultralytics import YOLO
 
-model = YOLO('../models/best.pt')
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
-model.to('cuda')
+from common.simple_tracker import SimpleTracker
 
-cap = cv2.VideoCapture('../data/video3.mkv')
+MODEL_PATH = PROJECT_ROOT / "Models" / "best.pt"
+VIDEO_PATH = PROJECT_ROOT / "Models" / "video_3.mkv"
 
-history = {}
+cap = cv2.VideoCapture(str(VIDEO_PATH))
+if not cap.isOpened():
+    raise RuntimeError(f"Could not open video: {VIDEO_PATH}")
+
+model = YOLO(str(MODEL_PATH))
+device = "cuda" if torch.cuda.is_available() else "cpu"
+print(f"Using device: {device}")
+print(f"Using model: {MODEL_PATH}")
+model.to(device)
+
+print(f"Using video: {VIDEO_PATH}")
+tracker = SimpleTracker()
 
 while cap.isOpened():
     success, frame = cap.read()
-    if not success: break
+    if not success:
+        break
 
-    results = model.track(frame, persist=True, tracker="bytetrack.yaml", classes=[0], imgsz=640, conf=0.2)
-    annotated_frame = results[0].plot()
+    result = model(
+        frame,
+        classes=[0],
+        imgsz=640,
+        conf=0.2,
+        verbose=False,
+    )[0]
 
-    if results[0].boxes.id is not None:
-        track_ids = results[0].boxes.id.int().cpu().tolist()
-        bboxes = results[0].boxes.xywh.cpu().numpy()  # Берем формат X_center, Y_center, Width, Height
+    annotated_frame = result.plot()
+    boxes = result.boxes
 
-        for i, track_id in enumerate(track_ids):
-            cx, cy, w, h = bboxes[i]
+    if boxes is not None and len(boxes) > 0:
+        bboxes = boxes.xywh.cpu().numpy()
+        confidences = boxes.conf.cpu().tolist() if boxes.conf is not None else [1.0] * len(bboxes)
 
-            # 1. Считаем Aspect Ratio
+        detections = []
+        for index, bbox in enumerate(bboxes):
+            cx, cy, w, h = bbox
+            if h <= 0:
+                continue
+            detections.append(
+                {
+                    "result_index": index,
+                    "center_x": float(cx),
+                    "center_y": float(cy),
+                    "width": float(w),
+                    "height": float(h),
+                    "confidence": float(confidences[index]),
+                }
+            )
+
+        tracked_detections = tracker.update(detections)
+
+        for detection in tracked_detections:
+            cx = float(detection["center_x"])
+            cy = float(detection["center_y"])
+            w = float(detection["width"])
+            h = float(detection["height"])
+            speed_relative = math.hypot(
+                cx - float(detection["previous_center_x"]),
+                cy - float(detection["previous_center_y"]),
+            )
             current_aspect_ratio = w / h
 
-            if track_id in history:
-                prev_cx = history[track_id]['center_x']
-                prev_cy = history[track_id]['center_y']
+            action = "Idle"
+            if current_aspect_ratio > 0.85:
+                action = "Sorting"
+            elif speed_relative > 15:
+                action = "Running"
+            elif speed_relative > 2:
+                action = "Walking"
 
-                # 2. Считаем пройденное расстояние (в пикселях за 1 кадр)
-                distance = math.hypot(cx - prev_cx, cy - prev_cy)
+            x1 = int(cx - w / 2)
+            y1 = int(cy - h / 2)
+            track_id = int(detection["track_id"])
+            text = f"ID {track_id} | {action} | Spd: {speed_relative:.1f} | AR: {current_aspect_ratio:.2f}"
 
-                # Пока оставляем сырую дистанцию, как ты прописал
-                speed_relative = distance
+            color = (0, 255, 0)
+            if action == "Running":
+                color = (0, 0, 255)
+            elif action == "Sorting":
+                color = (255, 165, 0)
 
-                # --- ЛОГИКА ОПРЕДЕЛЕНИЯ СОСТОЯНИЙ ---
-                action = "Idle"  # Базовое состояние
-
-                # Если ширина рамки приближается к высоте (человек согнулся/наклонился)
-                if current_aspect_ratio > 0.85:
-                    action = "Sorting"
-                # Если пропорции обычные, смотрим на скорость перемещения центра
-                elif speed_relative > 15:  # Больше 15 пикселей за кадр
-                    action = "Running"
-                elif speed_relative > 2:  # От 2 до 15 пикселей за кадр
-                    action = "Walking"
-
-                # 3. Выводим текст и боксы
-                x1 = int(cx - w / 2)
-                y1 = int(cy - h / 2)
-
-                # Формируем строку с состоянием и метриками
-                text = f"{action} | Spd: {speed_relative:.1f} | AR: {current_aspect_ratio:.2f}"
-
-                # Делаем цвет текста зависимым от действия для наглядности
-                color = (0, 255, 0)  # Зеленый для Idle/Walking
-                if action == "Running":
-                    color = (0, 0, 255)  # Красный
-                elif action == "Sorting":
-                    color = (255, 165, 0)  # Оранжевый
-
-                cv2.putText(annotated_frame, text, (x1, y1 - 20),
-                            cv2.FONT_HERSHEY_SIMPLEX, 2, color, 10)
-
-            # Обновляем историю
-            history[track_id] = {
-                'center_x': cx,
-                'center_y': cy,
-                'aspect_ratio': current_aspect_ratio
-            }
+            cv2.putText(
+                annotated_frame,
+                text,
+                (x1, y1 - 20),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                1.2,
+                color,
+                4,
+            )
 
     resized_frame = cv2.resize(annotated_frame, (1280, 720))
     cv2.imshow("Features Extractor", resized_frame)
 
-    if cv2.waitKey(30) & 0xFF == ord('q'):
+    if cv2.waitKey(1) & 0xFF == ord("q"):
         break
 
 cap.release()

@@ -1,76 +1,102 @@
 import cv2
+import torch
+from pathlib import Path
+import sys
 from ultralytics import YOLO
 
-# тестирование модели, которая определяет скелет
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
-model = YOLO('../models/yolov8s-pose.pt')
-model.to('cuda')
+from common.simple_tracker import SimpleTracker
 
-cap = cv2.VideoCapture('../data/testvideo4.mp4')
+MODELS_DIR = PROJECT_ROOT / "Models"
 
+video_candidates = [MODELS_DIR / "video_3.mkv"]
+if MODELS_DIR.exists():
+    video_candidates.extend(
+        path for path in sorted(MODELS_DIR.iterdir())
+        if path.is_file() and path.suffix.lower() in {".avi", ".mkv", ".mov", ".mp4"}
+    )
+
+video_path = next((path for path in video_candidates if path.exists()), None)
+if video_path is None:
+    raise FileNotFoundError(f"No video file was found in {MODELS_DIR}")
+
+model = YOLO("yolov8s-pose.pt")
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
+print(f"Using device: {device}")
+print(f"Using video: {video_path}")
+model.to(device)
+
+tracker = SimpleTracker()
 history = {}
 
-print("Запускаем анализ скелетов... Нажми 'q' для выхода.")
+print("Starting pose analysis. Press 'q' to exit.")
 
-while cap.isOpened():
-    success, frame = cap.read()
-    if not success: break
+for result in model(
+    str(video_path),
+    stream=True,
+    classes=[0],
+    verbose=False,
+):
+    annotated_frame = result.plot()
 
-    # Трекаем людей и их скелеты
-    results = model.track(frame, persist=True, tracker="bytetrack.yaml", classes=[0])
-    annotated_frame = results[0].plot()
+    if result.keypoints is not None and result.boxes is not None and len(result.boxes) > 0:
+        keypoints = result.keypoints.xy.cpu().numpy()
+        bboxes = result.boxes.xyxy.cpu().numpy()
+        bbox_centers = result.boxes.xywh.cpu().numpy()
+        confidences = result.boxes.conf.cpu().tolist() if result.boxes.conf is not None else [1.0] * len(bboxes)
 
-    # Проверяем, нашел ли он скелеты и выдал ли ID
-    if results[0].keypoints is not None and results[0].boxes.id is not None:
-        # Получаем координаты точек (x, y) скелета и ID рабочих
-        keypoints = results[0].keypoints.xy.cpu().numpy()
-        track_ids = results[0].boxes.id.int().cpu().tolist()
-        bboxes = results[0].boxes.xyxy.cpu().numpy()  # Координаты рамочек для текста
+        detections = []
+        for index, bbox in enumerate(bbox_centers):
+            center_x, center_y, width, height = bbox
+            if height <= 0:
+                continue
+            detections.append(
+                {
+                    "result_index": index,
+                    "center_x": float(center_x),
+                    "center_y": float(center_y),
+                    "width": float(width),
+                    "height": float(height),
+                    "confidence": float(confidences[index]),
+                }
+            )
 
-        for i, track_id in enumerate(track_ids):
-            kp = keypoints[i]
+        tracked_detections = tracker.update(detections)
 
-            # Индексы COCO датасета: 10 - правая кисть, 16 - правая лодыжка (нога)
+        for detection in tracked_detections:
+            result_index = int(detection["result_index"])
+            kp = keypoints[result_index]
+
             right_wrist_y = kp[10][1]
             right_ankle_x = kp[16][0]
 
-            # Если точка не видна (закрыта коробкой), YOLO выдает координаты 0. Пропускаем.
             if right_wrist_y == 0 or right_ankle_x == 0:
                 continue
 
+            action = "Idle"
+            track_id = int(detection["track_id"])
             if track_id in history:
-                # Достаем координаты из прошлого кадра
-                prev_wrist_y = history[track_id]['wrist_y']
-                prev_ankle_x = history[track_id]['ankle_x']
+                delta_wrist_y = abs(right_wrist_y - history[track_id]["wrist_y"])
+                delta_ankle_x = abs(right_ankle_x - history[track_id]["ankle_x"])
 
-                # Считаем разницу: насколько сдвинулась рука и нога (в пикселях)
-                delta_wrist_y = abs(right_wrist_y - prev_wrist_y)
-                delta_ankle_x = abs(right_ankle_x - prev_ankle_x)
-
-                # --- ТА САМАЯ ЖЕСТКАЯ ЛОГИКА IF/ELSE ---
-                action = "Idle"  # По умолчанию считаем, что рабочий просто стоит
-
-                # Если нога сдвинулась больше чем на 5 пикселей -> Идет
                 if delta_ankle_x > 5:
                     action = "Moving"
-                # Если нога стоит (<2px), а рука дергается вверх-вниз (>5px) -> Сортирует
                 elif delta_wrist_y > 5 and delta_ankle_x < 2:
                     action = "Sorting"
 
-                # Пишем статус прямо над головой человека
-                x1, y1 = int(bboxes[i][0]), int(bboxes[i][1])
-                cv2.putText(annotated_frame, f"Action: {action}", (x1, y1 - 10),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 3)
+            history[track_id] = {"wrist_y": right_wrist_y, "ankle_x": right_ankle_x}
 
-            # Запоминаем текущие координаты для следующего кадра
-            history[track_id] = {'wrist_y': right_wrist_y, 'ankle_x': right_ankle_x}
+            x1, y1 = int(bboxes[result_index][0]), int(bboxes[result_index][1])
+            cv2.putText(annotated_frame, f"ID {track_id} | Action: {action}", (x1, y1 - 10),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 3)
 
-    # Ресайз и вывод на экран
     resized_frame = cv2.resize(annotated_frame, (1280, 720))
     cv2.imshow("YOLOv8 Pose Logic", resized_frame)
 
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
 
-cap.release()
 cv2.destroyAllWindows()

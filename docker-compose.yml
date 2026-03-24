@@ -16,3 +16,4 @@ services:
       dockerfile: worker/Dockerfile
     volumes:
       - ./data:/app/data
+      - ./Models:/app/Models:ro
