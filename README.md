@@ -1,68 +1,70 @@
-# 🚀 AI Warehouse Analytics (Hackathon Project)
+# AI Warehouse Analytics
 
-Проект для хакатона: система трекинга и аналитики действий рабочих на складе с использованием YOLOv8, ByteTrack и Streamlit. 
+Hackathon project for warehouse worker tracking and action analytics with YOLO, ByteTrack, Streamlit, and SQLite.
 
-Архитектура разделена на 2 независимых модуля:
-1. **Worker (CV + ML):** Фоновый процесс, который обрабатывает видео, делает инференс и пишет события в SQLite базу.
-2. **UI (Streamlit):** Интерфейс для разметки данных, обучения модели и отображения live-аналитики из базы.
+## Current Architecture
 
----
+- `app/main.py`: Streamlit dashboard that reads `data/events.db` and refreshes automatically.
+- `worker/main.py`: YOLO-based worker that tracks people in a video, classifies actions, and writes events into SQLite.
+- `common/runtime.py`: Shared path helpers so local runs and Docker use the same project layout.
+- `worker/*.py`: Supporting experiments for frame extraction, bounding-box heuristics, and pose-based tests.
 
-## 🛠 Как начать кодить (Локальная разработка)
+## Local Development
 
-Мы используем `uv` — сверхбыстрый менеджер пакетов. Он сам создаст виртуальное окружение (`.venv`) и подтянет все зависимости.
+Requirements:
 
-### 1. Подготовка
-Убедись, что у тебя установлен Python (>=3.10) и `uv`.
-Если `uv` нет, ставь через консоль:
-* Windows: `powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"`
-* macOS/Linux: `curl -LsSf https://astral.sh/uv/install.sh | sh`
+- Python 3.10 to 3.12
+- `uv`
 
-### 2. Установка проекта
-Склонируй репозиторий и подтяни зависимости:
+Install dependencies:
+
 ```bash
-git clone <ССЫЛКА_НА_ТВОЙ_РЕПОЗИТОРИЙ>
-cd ai_hackaton
 uv sync
 ```
-Эта команда за секунду установит все нужные библиотеки (Streamlit, Pandas и т.д.) и создаст папку .venv.
-### 3. Локальный запуск (Пишем и дебажим код тут)
 
-Так как сервисы независимы, ты можешь запускать их отдельно прямо из PyCharm или терминала:
+Run the dashboard:
 
-Запустить интерфейс (UI):
-```Bash
-    uv run streamlit run app/main.py
+```bash
+uv run streamlit run app/main.py
 ```
-(Откроется в браузере по адресу http://localhost:8501)
 
-Запустить фоновый процесс (Worker):
-```Bash
+Run the worker:
+
+```bash
 uv run python worker/main.py
 ```
-(Начнет генерировать данные в файл data/events.db )
 
-🐳 Полный запуск через Docker (Финальный тест)
+The worker will create `data/events.db` automatically. By default it uses:
 
-Используем Докер, чтобы проверить, как вся система работает вместе (база данных, воркер и UI), или для финальной презентации.
+- `Models/best.pt`
+- `Models/video_3.mkv`
 
-Убедись, что запущен Docker Desktop, и введи в корне проекта:
+You can override paths with environment variables:
 
-```Bash
-docker-compose up --build
+- `AI_HACKATON_DATA_DIR`
+- `AI_HACKATON_MODELS_DIR`
+- `AI_HACKATON_MODEL_PATH`
+- `AI_HACKATON_VIDEO_PATH`
+
+## Docker
+
+Start both services:
+
+```bash
+docker compose up --build
 ```
 
-После сборки интерфейс будет доступен по адресу http://localhost:8501.
+Docker mounts:
 
-База данных events.db будет автоматически расшарена между контейнерами в папке data/.
+- `./data` -> `/app/data`
+- `./Models` -> `/app/Models`
 
-Чтобы остановить контейнеры, нажми Ctrl+C в терминале и пропиши docker-compose down.
+The dashboard will be available at [http://localhost:8501](http://localhost:8501).
 
-📁 Структура проекта
-    /app — Код интерфейса на Streamlit.
+## Repository Structure
 
-    /worker — Код фонового процесса (CV/ML).
-
-    /data — Общая папка для SQLite базы (events.db).
-
-    /models — Папка для сохранения обученных моделей (rf_v1.pkl).
+- `app/`: Streamlit UI code.
+- `worker/`: Worker pipeline and experimentation scripts.
+- `common/`: Shared runtime helpers.
+- `Models/`: Trained models, videos, and source materials.
+- `data/`: Generated SQLite database and derived artifacts.

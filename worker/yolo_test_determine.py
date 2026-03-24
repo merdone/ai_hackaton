@@ -1,65 +1,101 @@
 import cv2
 import math
+import torch
+from pathlib import Path
+import sys
 from ultralytics import YOLO
 
-# рабочая версия бежит/идет/стоит
 
-model = YOLO('../models/yolov8m.pt')
-model.to('cuda')
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
-cap = cv2.VideoCapture('../data/run.mp4')
+from common.simple_tracker import SimpleTracker
 
-history = {}
+
+MODEL_PATH = PROJECT_ROOT / "Models" / "best.pt"
+VIDEO_PATH = PROJECT_ROOT / "Models" / "video_3.mkv"
+
+cap = cv2.VideoCapture(str(VIDEO_PATH))
+if not cap.isOpened():
+    raise RuntimeError(f"Could not open video: {VIDEO_PATH}")
+
+model = YOLO(str(MODEL_PATH))
+device = "cuda" if torch.cuda.is_available() else "cpu"
+print(f"Using device: {device}")
+print(f"Using model: {MODEL_PATH}")
+model.to(device)
+
+print(f"Using video: {VIDEO_PATH}")
+tracker = SimpleTracker()
 
 while cap.isOpened():
     success, frame = cap.read()
-    if not success: break
+    if not success:
+        break
 
-    results = model.track(frame, persist=True, tracker="bytetrack.yaml", classes=[0])
-    annotated_frame = results[0].plot()
+    result = model(
+        frame,
+        classes=[0],
+        imgsz=640,
+        conf=0.2,
+        verbose=False,
+    )[0]
 
-    if results[0].boxes.id is not None:
-        track_ids = results[0].boxes.id.int().cpu().tolist()
-        bboxes = results[0].boxes.xywh.cpu().numpy()  # Берем формат X_center, Y_center, Width, Height
+    annotated_frame = result.plot()
+    boxes = result.boxes
 
-        for i, track_id in enumerate(track_ids):
-            cx, cy, w, h = bboxes[i]
-            # 1. Считаем Aspect Ratio (Отношение ширины к высоте)
-            # Если человек стоит прямо, h > w (соотношение < 1).
-            # Если наклонился за коробкой, w может стать больше h (соотношение > 1).
+    if boxes is not None and len(boxes) > 0:
+        bboxes = boxes.xywh.cpu().numpy()
+        confidences = boxes.conf.cpu().tolist() if boxes.conf is not None else [1.0] * len(bboxes)
+
+        detections = []
+        for index, bbox in enumerate(bboxes):
+            cx, cy, w, h = bbox
+            if h <= 0:
+                continue
+            detections.append(
+                {
+                    "result_index": index,
+                    "center_x": float(cx),
+                    "center_y": float(cy),
+                    "width": float(w),
+                    "height": float(h),
+                    "confidence": float(confidences[index]),
+                }
+            )
+
+        tracked_detections = tracker.update(detections)
+
+        for detection in tracked_detections:
+            cx = float(detection["center_x"])
+            cy = float(detection["center_y"])
+            w = float(detection["width"])
+            h = float(detection["height"])
             current_aspect_ratio = w / h
+            speed_relative = math.hypot(
+                cx - float(detection["previous_center_x"]),
+                cy - float(detection["previous_center_y"]),
+            )
 
-            if track_id in history:
-                prev_cx = history[track_id]['center_x']
-                prev_cy = history[track_id]['center_y']
-
-                # 2. Считаем пройденное расстояние по теореме Пифагора
-                distance = math.hypot(cx - prev_cx, cy - prev_cy)
-
-                # 3. Нормализуем скорость (speed_relative из вашего ТЗ)
-                # Делим на высоту рамки (h), чтобы скорость не зависела от того,
-                # близко человек к камере или далеко.
-                # speed_relative = distance / h
-                speed_relative = distance
-                # Выводим цифры прямо на видео для дебага (округляем для красоты)
-                x1 = int(cx - w / 2)
-                y1 = int(cy - h / 2)
-
-                text = f"Spd: {speed_relative:.2f} | AR: {current_aspect_ratio:.2f}"
-                cv2.putText(annotated_frame, text, (x1, y1 - 100),
-                            cv2.FONT_HERSHEY_SIMPLEX, 2, (255, 0, 255), 10)
-
-            # Обновляем историю для следующего кадра
-            history[track_id] = {
-                'center_x': cx,
-                'center_y': cy,
-                'aspect_ratio': current_aspect_ratio
-            }
+            x1 = int(cx - w / 2)
+            y1 = int(cy - h / 2)
+            track_id = int(detection["track_id"])
+            text = f"ID {track_id} | Spd: {speed_relative:.2f} | AR: {current_aspect_ratio:.2f}"
+            cv2.putText(
+                annotated_frame,
+                text,
+                (x1, y1 - 100),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                1.2,
+                (255, 0, 255),
+                4,
+            )
 
     resized_frame = cv2.resize(annotated_frame, (1280, 720))
     cv2.imshow("Features Extractor", resized_frame)
 
-    if cv2.waitKey(1) & 0xFF == ord('q'):
+    if cv2.waitKey(1) & 0xFF == ord("q"):
         break
 
 cap.release()
