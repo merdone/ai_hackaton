@@ -2,12 +2,13 @@ import cv2
 import math
 from ultralytics import YOLO
 
+# рабочая версия бежит/идет/стоит
+
 model = YOLO('../models/yolov8m.pt')
 model.to('cuda')
 
 cap = cv2.VideoCapture('../data/run.mp4')
 
-# Словарь для хранения истории: {track_id: {'center_x': 100, 'center_y': 200, 'aspect_ratio': 0.5}}
 history = {}
 
 while cap.isOpened():

@@ -2,4 +2,10 @@
 .idea/
 __pycache__/
 materials/
+models/
+runs/
+datasets/
+data/
+*.mp4
+*.mkv
 data/events.db

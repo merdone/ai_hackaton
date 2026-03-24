@@ -1,7 +1,7 @@
 import cv2
 from ultralytics import YOLO
 
-#
+# тестирование модели, которая определяет скелет
 
 model = YOLO('../models/yolov8s-pose.pt')
 model.to('cuda')
