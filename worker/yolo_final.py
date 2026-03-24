@@ -1,4 +1,5 @@
 import cv2
+import json
 import math
 from ultralytics import YOLO
 
@@ -6,9 +7,20 @@ model = YOLO('../models/best.pt')
 
 model.to('cuda')
 
-cap = cv2.VideoCapture('../data/video3.mkv')
+cap = cv2.VideoCapture('../data/video2.mkv')
 
+# --- ДОБАВЛЯЕМ ЭТО ---
+# Получаем параметры оригинального видео
+fps = int(cap.get(cv2.CAP_PROP_FPS))
+width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+# Настраиваем кодек и файл для сохранения
+fourcc = cv2.VideoWriter_fourcc(*'avc1') # Стандартный кодек для mp4
+out = cv2.VideoWriter('../data/preview_with_ids.mp4', fourcc, fps, (width, height))
 history = {}
+
+extracted_features = []
 
 while cap.isOpened():
     success, frame = cap.read()
@@ -19,60 +31,51 @@ while cap.isOpened():
 
     if results[0].boxes.id is not None:
         track_ids = results[0].boxes.id.int().cpu().tolist()
-        bboxes = results[0].boxes.xywh.cpu().numpy()  # Берем формат X_center, Y_center, Width, Height
+        bboxes = results[0].boxes.xywh.cpu().numpy()
 
         for i, track_id in enumerate(track_ids):
             cx, cy, w, h = bboxes[i]
 
-            # 1. Считаем Aspect Ratio
             current_aspect_ratio = w / h
 
             if track_id in history:
                 prev_cx = history[track_id]['center_x']
                 prev_cy = history[track_id]['center_y']
+                prev_ar = history[track_id]['aspect_ratio']
 
-                # 2. Считаем пройденное расстояние (в пикселях за 1 кадр)
                 distance = math.hypot(cx - prev_cx, cy - prev_cy)
 
-                # Пока оставляем сырую дистанцию, как ты прописал
-                speed_relative = distance
+                if h > 0:
+                    speed_relative = distance / h
+                else:
+                    speed_relative = 0
 
-                # --- ЛОГИКА ОПРЕДЕЛЕНИЯ СОСТОЯНИЙ ---
-                action = "Idle"  # Базовое состояние
+                aspect_ratio_change = current_aspect_ratio - prev_ar
 
-                # Если ширина рамки приближается к высоте (человек согнулся/наклонился)
-                if current_aspect_ratio > 0.85:
-                    action = "Sorting"
-                # Если пропорции обычные, смотрим на скорость перемещения центра
-                elif speed_relative > 15:  # Больше 15 пикселей за кадр
-                    action = "Running"
-                elif speed_relative > 2:  # От 2 до 15 пикселей за кадр
-                    action = "Walking"
+                extracted_features.append({
+                    "frame_id": int(cap.get(cv2.CAP_PROP_POS_FRAMES)),
+                    "track_id": int(track_id),
+                    "speed_relative": float(round(speed_relative, 4)),
+                    "aspect_ratio": float(round(current_aspect_ratio, 4)),
+                    "aspect_ratio_change": float(round(aspect_ratio_change, 4))
+                })
 
-                # 3. Выводим текст и боксы
                 x1 = int(cx - w / 2)
                 y1 = int(cy - h / 2)
 
-                # Формируем строку с состоянием и метриками
-                text = f"{action} | Spd: {speed_relative:.1f} | AR: {current_aspect_ratio:.2f}"
+                # text = f"Spd: {speed_relative:.1f} | AR: {current_aspect_ratio:.2f}"
+                #
+                # color = (0, 255, 0)
+                #
+                # cv2.putText(annotated_frame, text, (x1, y1 - 20),
+                #             cv2.FONT_HERSHEY_SIMPLEX, 2, color, 10)
 
-                # Делаем цвет текста зависимым от действия для наглядности
-                color = (0, 255, 0)  # Зеленый для Idle/Walking
-                if action == "Running":
-                    color = (0, 0, 255)  # Красный
-                elif action == "Sorting":
-                    color = (255, 165, 0)  # Оранжевый
-
-                cv2.putText(annotated_frame, text, (x1, y1 - 20),
-                            cv2.FONT_HERSHEY_SIMPLEX, 2, color, 10)
-
-            # Обновляем историю
             history[track_id] = {
                 'center_x': cx,
                 'center_y': cy,
                 'aspect_ratio': current_aspect_ratio
             }
-
+    out.write(annotated_frame)
     resized_frame = cv2.resize(annotated_frame, (1280, 720))
     cv2.imshow("Features Extractor", resized_frame)
 
@@ -81,3 +84,7 @@ while cap.isOpened():
 
 cap.release()
 cv2.destroyAllWindows()
+out.release()
+
+with open('../data/features_temp.json', 'w') as f:
+    json.dump(extracted_features, f, indent=4)
