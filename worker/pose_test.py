@@ -1,14 +1,13 @@
 import cv2
 from ultralytics import YOLO
 
-# 1. Берем модель именно для ПОЗ (с суффиксом -pose)
-model = YOLO('yolov8s-pose.pt')
-model.to('cuda')  # Твоя RTX 4050 в деле!
+#
+
+model = YOLO('../models/yolov8s-pose.pt')
+model.to('cuda')
 
 cap = cv2.VideoCapture('../data/testvideo4.mp4')
 
-# Словарь, чтобы помнить, где были руки и ноги рабочего в прошлом кадре
-# Формат: {track_id: {'wrist_y': 100, 'ankle_x': 50}}
 history = {}
 
 print("Запускаем анализ скелетов... Нажми 'q' для выхода.")

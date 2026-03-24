@@ -2,19 +2,19 @@ import cv2
 import math
 from ultralytics import YOLO
 
-model = YOLO('yolov8m.pt')
+model = YOLO('../models/best.pt')
+
 model.to('cuda')
 
-cap = cv2.VideoCapture('../data/testvideo4.mp4')
+cap = cv2.VideoCapture('../data/video3.mkv')
 
-# Словарь для хранения истории: {track_id: {'center_x': 100, 'center_y': 200, 'aspect_ratio': 0.5}}
 history = {}
 
 while cap.isOpened():
     success, frame = cap.read()
     if not success: break
 
-    results = model.track(frame, persist=True, tracker="bytetrack.yaml", classes=[0])
+    results = model.track(frame, persist=True, tracker="bytetrack.yaml", classes=[0], imgsz=640, conf=0.2)
     annotated_frame = results[0].plot()
 
     if results[0].boxes.id is not None:
@@ -76,7 +76,7 @@ while cap.isOpened():
     resized_frame = cv2.resize(annotated_frame, (1280, 720))
     cv2.imshow("Features Extractor", resized_frame)
 
-    if cv2.waitKey(1) & 0xFF == ord('q'):
+    if cv2.waitKey(30) & 0xFF == ord('q'):
         break
 
 cap.release()

@@ -4,7 +4,7 @@ from ultralytics import YOLO
 # import torch
 # print("CUDA доступна:", torch.cuda.is_available())
 
-model = YOLO('yolov8m.pt') # Беремо Medium версію
+model = YOLO('../models/yolov8m.pt') # Беремо Medium версію
 model.to('cuda')           # Примусово закидаємо її в пам'ять RTX 4050
 
 # 2. Открываем тестовое видео из нашей общей папки

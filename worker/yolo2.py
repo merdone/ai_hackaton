@@ -2,7 +2,7 @@ import cv2
 import math
 from ultralytics import YOLO
 
-model = YOLO('yolov8m.pt')
+model = YOLO('../models/yolov8m.pt')
 model.to('cuda')
 
 cap = cv2.VideoCapture('../data/run.mp4')
