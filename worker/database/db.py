@@ -7,17 +7,21 @@ class LogisticsDatabase:
     def __init__(self, db_path):
         self.db_path = db_path
         self.connection = None
+        self.connect() # Просто вызываем метод, не присваивая его результат
 
     def __enter__(self):
         self.connect()
         return self
 
-    def __exit__(self):
+    # Добавляем обязательные аргументы для __exit__
+    def __exit__(self, exc_type, exc_val, exc_tb):
         self.disconnect()
 
     def connect(self):
-        self.connection = sqlite3.connect(self.db_path)
-        self.connection.row_factory = sqlite3.Row 
+        # Если соединение уже есть, не открываем новое
+        if not self.connection:
+            self.connection = sqlite3.connect(self.db_path)
+            self.connection.row_factory = sqlite3.Row 
 
     def disconnect(self):
         if self.connection:
@@ -93,9 +97,7 @@ class LogisticsDatabase:
     
     def get_worker_history(self, worker_id, start_time=None, end_time=None):
         """
-        Получает историю всех действий конкретного рабочего.
-        Опционально можно передать start_time и end_time (объекты datetime или ISO-строки), 
-        чтобы ограничить поиск конкретной сменой.
+        Gets the event history for a specific worker, optionally filtered by a time range.
         """
         query = "SELECT * FROM operations_log WHERE worker_id = ?"
         params = [worker_id]
@@ -112,10 +114,6 @@ class LogisticsDatabase:
         return self.execute_query(query, tuple(params))
 
     def get_events_by_time_range(self, start_time, end_time):
-        """
-        Получает абсолютно все события на терминале за указанный промежуток времени.
-        Полезно для replay-режима или анализа "часов пик".
-        """
         query = """
         SELECT * FROM operations_log 
         WHERE timestamp_start >= ? AND timestamp_end <= ?
@@ -128,10 +126,6 @@ class LogisticsDatabase:
         return self.execute_query(query, (st_formatted, et_formatted))
 
     def get_worker_efficiency(self, worker_id, start_time, end_time):
-        """
-        Агрегирует данные по конкретному рабочему за период.
-        Возвращает сколько времени он потратил на каждый тип задач.
-        """
         query = """
         SELECT 
             task_classification,
@@ -150,3 +144,16 @@ class LogisticsDatabase:
 
 
 db = LogisticsDatabase(config.DATABASE_PATH)
+
+
+if __name__ == "__main__":
+    from datetime import datetime, timedelta
+
+    end_time = datetime.now()
+    start_time = end_time - timedelta(hours=8)
+
+    worker_logs = db.get_worker_history("W-042", start_time, end_time)
+
+    efficiency = db.get_worker_efficiency("W-042", start_time, end_time)
+
+    morning_rush = db.get_events_by_time_range("2026-03-25T10:00:00", "2026-03-25T12:00:00")
