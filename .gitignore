@@ -1,12 +1,9 @@
 .venv/
 .idea/
 __pycache__/
+*.pyc
 materials/
-models/
-Models/
 runs/
 datasets/
 data/
-*.mp4
-*.mkv
 data/events.db

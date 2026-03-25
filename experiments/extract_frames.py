@@ -1,23 +1,23 @@
 from pathlib import Path
+import sys
 
 import cv2
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-MODELS_DIR = PROJECT_ROOT / "Models"
-OUTPUT_DIR = PROJECT_ROOT / "data" / "dataset" / "images"
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
-videos = sorted(
-    path for path in MODELS_DIR.iterdir()
-    if path.is_file() and path.suffix.lower() in {".avi", ".mkv", ".mov", ".mp4"}
-) if MODELS_DIR.exists() else []
+from common.runtime import available_video_paths, data_dir
 
+OUTPUT_DIR = data_dir() / "dataset" / "images"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
+videos = available_video_paths()
 saved_count = 0
 frames_to_skip = 50
 
 if not videos:
-    raise FileNotFoundError(f"No video files were found in {MODELS_DIR}")
+    raise FileNotFoundError("No video files were found in the asset folder.")
 
 print(f"Extracting frames from {len(videos)} video file(s)...")
 

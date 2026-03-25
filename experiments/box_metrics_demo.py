@@ -3,18 +3,18 @@ import math
 import torch
 from pathlib import Path
 import sys
-from ultralytics import YOLO
 
+from ultralytics import YOLO
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from common.simple_tracker import SimpleTracker
+from common.runtime import default_model_path, default_video_path
+from worker.tracking import SimpleTracker
 
-
-MODEL_PATH = PROJECT_ROOT / "Models" / "best.pt"
-VIDEO_PATH = PROJECT_ROOT / "Models" / "video_3.mkv"
+MODEL_PATH = default_model_path()
+VIDEO_PATH = default_video_path()
 
 cap = cv2.VideoCapture(str(VIDEO_PATH))
 if not cap.isOpened():
@@ -93,7 +93,7 @@ while cap.isOpened():
             )
 
     resized_frame = cv2.resize(annotated_frame, (1280, 720))
-    cv2.imshow("Features Extractor", resized_frame)
+    cv2.imshow("Box Metrics Demo", resized_frame)
 
     if cv2.waitKey(1) & 0xFF == ord("q"):
         break
