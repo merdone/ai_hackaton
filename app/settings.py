@@ -26,19 +26,21 @@ class AppSettings:
     )
 
 
+def _resolve_path(path_value: str, base_dir: Path) -> Path:
+    candidate = Path(path_value).expanduser()
+    if candidate.is_absolute():
+        return candidate.resolve()
+    return (base_dir / candidate).resolve()
+
+
 def get_app_settings() -> AppSettings:
     base_dir = Path(__file__).resolve().parent
 
-    def _resolve(path_value: str, fallback_relative: str) -> Path:
-        if path_value:
-            return Path(path_value).expanduser().resolve()
-        return (base_dir / fallback_relative).resolve()
-
-    features_file = _resolve(os.getenv("APP_FEATURES_FILE", ""), "../data/features_temp.json")
-    dataset_file = _resolve(os.getenv("APP_DATASET_FILE", ""), "../data/labeled_dataset.csv")
-    model_file = _resolve(os.getenv("APP_MODEL_FILE", ""), "../models/rf_v1.pkl")
-    preview_video_path = _resolve(os.getenv("APP_PREVIEW_VIDEO_PATH", ""), "../data/preview_with_ids.mp4")
-    original_video_path = _resolve(os.getenv("APP_ORIGINAL_VIDEO_PATH", ""), "../data/video3.mkv")
+    features_file = _resolve_path(os.getenv("APP_FEATURES_FILE", "../data/features_temp.json"), PROJECT_ROOT)
+    dataset_file = _resolve_path(os.getenv("APP_DATASET_FILE", "../data/labeled_dataset.csv"), PROJECT_ROOT)
+    model_file = _resolve_path(os.getenv("APP_MODEL_FILE", "../models/rf_v1.pkl"), PROJECT_ROOT)
+    preview_video_path = _resolve_path(os.getenv("APP_PREVIEW_VIDEO_PATH", "../data/preview_with_ids.mp4"), PROJECT_ROOT)
+    original_video_path = _resolve_path(os.getenv("APP_ORIGINAL_VIDEO_PATH", "../data/video3.mkv"), PROJECT_ROOT)
 
     return AppSettings(
         base_dir=base_dir,

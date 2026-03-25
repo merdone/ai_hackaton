@@ -17,8 +17,15 @@ def get_video_fps(video_path: Path) -> float:
     return fps if fps > 0 else 25.0
 
 
+def get_file_version_token(path: Path) -> int:
+    if not path.exists():
+        return 0
+    return path.stat().st_mtime_ns
+
+
 @st.cache_data
-def load_features(features_file: str) -> pd.DataFrame:
+def load_features(features_file: str, version_token: int) -> pd.DataFrame:
+    _ = version_token  # token is used only to invalidate cache when file changes
     path = Path(features_file)
     if path.exists():
         with path.open("r", encoding="utf-8") as f:
@@ -26,12 +33,24 @@ def load_features(features_file: str) -> pd.DataFrame:
     return pd.DataFrame()
 
 
-def select_frame_range(id_data: pd.DataFrame, fps: float) -> tuple[int, int]:
-    min_frame = int(id_data["frame_id"].min())
-    max_frame = int(id_data["frame_id"].max())
+def get_video_meta(video_path: Path) -> tuple[float, int]:
+    cap = cv2.VideoCapture(str(video_path))
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+    cap.release()
 
-    if min_frame == max_frame:
-        st.warning("Слишком мало кадров для этого ID.")
+    effective_fps = fps if fps and fps > 0 else 25.0
+    return float(effective_fps), frame_count
+
+
+def select_frame_range(
+        fps: float,
+        slider_key: str,
+        min_frame: int,
+        max_frame: int,
+) -> tuple[int, int]:
+    if min_frame >= max_frame:
+        st.warning("Слишком мало кадров для выбора интервала.")
         return min_frame, max_frame
 
     min_sec = float(min_frame / fps)
@@ -43,6 +62,7 @@ def select_frame_range(id_data: pd.DataFrame, fps: float) -> tuple[int, int]:
         value=(min_sec, max_sec),
         step=0.5,
         format="%.1f s",
+        key=slider_key,
     )
     return int(selected_sec[0] * fps), int(selected_sec[1] * fps)
 
@@ -88,12 +108,14 @@ def run_training(settings: AppSettings) -> None:
 
 def main() -> None:
     settings = get_app_settings()
-    fps = get_video_fps(settings.original_video_path)
+    fps, video_frames = get_video_meta(settings.original_video_path)
 
     st.set_page_config(page_title="Разметка и Обучение", layout="wide")
     st.title("Инструмент обучения (День 3)")
 
-    df_features = load_features(str(settings.features_file))
+    features_version = get_file_version_token(settings.features_file)
+    video_version = get_file_version_token(settings.original_video_path)
+    df_features = load_features(str(settings.features_file), features_version)
     if df_features.empty:
         st.warning("Нет данных от YOLO. Сначала запусти скрипт препроцессинга (День 2).")
         st.stop()
@@ -115,16 +137,35 @@ def main() -> None:
 
     with col2:
         id_data = df_features[df_features["track_id"] == selected_id]
-        selected_frames = select_frame_range(id_data, fps)
+        slider_key = f"frame_range_{selected_id}_{features_version}_{video_version}"
+
+        features_min_frame = int(df_features["frame_id"].min())
+        features_max_frame = int(df_features["frame_id"].max())
+        global_min_frame = min(0, features_min_frame)
+        global_max_frame = max(features_max_frame, max(video_frames - 1, 0))
+
+        selected_frames = select_frame_range(
+            fps=fps,
+            slider_key=slider_key,
+            min_frame=global_min_frame,
+            max_frame=global_max_frame,
+        )
+
+        if id_data.empty:
+            st.warning("Для выбранного ID нет треков в фичах.")
+        else:
+            id_min_sec = float(int(id_data["frame_id"].min()) / fps)
+            id_max_sec = float(int(id_data["frame_id"].max()) / fps)
+            st.caption(f"ID {selected_id} найден в диапазоне: {id_min_sec:.1f}s - {id_max_sec:.1f}s")
 
     with col3:
         action = st.selectbox("Действие:", settings.actions)
 
     if st.button("Добавить в датасет"):
         mask = (
-            (df_features["track_id"] == selected_id)
-            & (df_features["frame_id"] >= selected_frames[0])
-            & (df_features["frame_id"] <= selected_frames[1])
+                (df_features["track_id"] == selected_id)
+                & (df_features["frame_id"] >= selected_frames[0])
+                & (df_features["frame_id"] <= selected_frames[1])
         )
 
         df_selected = df_features[mask].copy()
@@ -141,4 +182,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
