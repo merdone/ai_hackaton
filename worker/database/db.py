@@ -1,27 +1,25 @@
 import sqlite3
 import json
 from datetime import datetime
-from config import config
+from worker.database.config import config
 
 class LogisticsDatabase:
     def __init__(self, db_path):
         self.db_path = db_path
         self.connection = None
-        self.connect() # Просто вызываем метод, не присваивая его результат
+        self.connect()
 
     def __enter__(self):
         self.connect()
         return self
 
-    # Добавляем обязательные аргументы для __exit__
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.disconnect()
 
     def connect(self):
-        # Если соединение уже есть, не открываем новое
         if not self.connection:
-            self.connection = sqlite3.connect(self.db_path)
-            self.connection.row_factory = sqlite3.Row 
+            self.connection = sqlite3.connect(self.db_path, check_same_thread=False)
+            self.connection.row_factory = sqlite3.Row
 
     def disconnect(self):
         if self.connection:
