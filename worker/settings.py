@@ -4,6 +4,11 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
+from dotenv import load_dotenv
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+load_dotenv(dotenv_path=PROJECT_ROOT / ".env", override=False)
+
 
 @dataclass(frozen=True)
 class WorkerSettings:
@@ -55,6 +60,13 @@ def _parse_bool(value: str, fallback: bool) -> bool:
     return fallback
 
 
+def _resolve_path(path_value: str, base_dir: Path) -> str:
+    candidate = Path(path_value).expanduser()
+    if candidate.is_absolute():
+        return str(candidate)
+    return str((base_dir / candidate).resolve())
+
+
 def get_settings() -> WorkerSettings:
     """Load worker settings with defaults that preserve current behavior."""
     project_root = Path(__file__).resolve().parents[1]
@@ -85,7 +97,7 @@ def get_settings() -> WorkerSettings:
     )
 
     return WorkerSettings(
-        db_path=os.getenv("WORKER_DB_PATH", defaults.db_path),
+        db_path=_resolve_path(os.getenv("WORKER_DB_PATH", defaults.db_path), project_root),
         sleep_seconds=float(os.getenv("WORKER_SLEEP_SECONDS", str(defaults.sleep_seconds))),
         worker_ids=_parse_csv(os.getenv("WORKER_IDS", ",".join(defaults.worker_ids)), defaults.worker_ids),
         actions=_parse_csv(os.getenv("WORKER_ACTIONS", ",".join(defaults.actions)), defaults.actions),
@@ -93,10 +105,10 @@ def get_settings() -> WorkerSettings:
         confidence_min=float(os.getenv("WORKER_CONFIDENCE_MIN", str(defaults.confidence_min))),
         confidence_max=float(os.getenv("WORKER_CONFIDENCE_MAX", str(defaults.confidence_max))),
         timestamp_format=os.getenv("WORKER_TIMESTAMP_FORMAT", defaults.timestamp_format),
-        yolo_model_path=os.getenv("WORKER_YOLO_MODEL_PATH", defaults.yolo_model_path),
-        yolo_video_path=os.getenv("WORKER_YOLO_VIDEO_PATH", defaults.yolo_video_path),
-        yolo_preview_output_path=os.getenv("WORKER_YOLO_PREVIEW_PATH", defaults.yolo_preview_output_path),
-        yolo_features_output_path=os.getenv("WORKER_YOLO_FEATURES_PATH", defaults.yolo_features_output_path),
+        yolo_model_path=_resolve_path(os.getenv("WORKER_YOLO_MODEL_PATH", defaults.yolo_model_path), project_root),
+        yolo_video_path=_resolve_path(os.getenv("WORKER_YOLO_VIDEO_PATH", defaults.yolo_video_path), project_root),
+        yolo_preview_output_path=_resolve_path(os.getenv("WORKER_YOLO_PREVIEW_PATH", defaults.yolo_preview_output_path), project_root),
+        yolo_features_output_path=_resolve_path(os.getenv("WORKER_YOLO_FEATURES_PATH", defaults.yolo_features_output_path), project_root),
         yolo_tracker=os.getenv("WORKER_YOLO_TRACKER", defaults.yolo_tracker),
         yolo_classes=_parse_csv_int(os.getenv("WORKER_YOLO_CLASSES", ",".join(str(i) for i in defaults.yolo_classes)),
                                     defaults.yolo_classes),
