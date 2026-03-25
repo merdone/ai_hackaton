@@ -5,6 +5,9 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 VIDEO_EXTENSIONS = {".avi", ".mkv", ".mov", ".mp4"}
+DEFAULT_MODEL_NAME = "best.pt"
+DEFAULT_POSE_MODEL_NAME = "yolov8s-pose.pt"
+DEFAULT_VIDEO_NAME = "video_3.mkv"
 
 
 def project_root() -> Path:
@@ -39,7 +42,23 @@ def default_model_path() -> Path:
     if env_path:
         return Path(env_path)
 
-    return models_dir() / "best.pt"
+    return models_dir() / DEFAULT_MODEL_NAME
+
+
+def default_pose_model_path() -> Path:
+    env_path = os.environ.get("AI_HACKATON_POSE_MODEL_PATH")
+    if env_path:
+        return Path(env_path)
+
+    in_models_dir = models_dir() / DEFAULT_POSE_MODEL_NAME
+    if in_models_dir.exists():
+        return in_models_dir
+
+    legacy_root_path = PROJECT_ROOT / DEFAULT_POSE_MODEL_NAME
+    if legacy_root_path.exists():
+        return legacy_root_path
+
+    return in_models_dir
 
 
 def available_video_paths() -> list[Path]:
@@ -59,7 +78,7 @@ def default_video_path() -> Path:
     if env_path:
         return Path(env_path)
 
-    preferred = models_dir() / "video_3.mkv"
+    preferred = models_dir() / DEFAULT_VIDEO_NAME
     if preferred.exists():
         return preferred
 

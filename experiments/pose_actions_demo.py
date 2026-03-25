@@ -2,44 +2,43 @@ import cv2
 import torch
 from pathlib import Path
 import sys
+
 from ultralytics import YOLO
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from common.simple_tracker import SimpleTracker
+from common.runtime import default_pose_model_path, default_video_path
+from worker.tracking import SimpleTracker
 
-MODELS_DIR = PROJECT_ROOT / "Models"
+POSE_MODEL_PATH = default_pose_model_path()
+VIDEO_PATH = default_video_path()
 
-video_candidates = [MODELS_DIR / "video_3.mkv"]
-if MODELS_DIR.exists():
-    video_candidates.extend(
-        path for path in sorted(MODELS_DIR.iterdir())
-        if path.is_file() and path.suffix.lower() in {".avi", ".mkv", ".mov", ".mp4"}
-    )
+cap = cv2.VideoCapture(str(VIDEO_PATH))
+if not cap.isOpened():
+    raise RuntimeError(f"Could not open video: {VIDEO_PATH}")
 
-video_path = next((path for path in video_candidates if path.exists()), None)
-if video_path is None:
-    raise FileNotFoundError(f"No video file was found in {MODELS_DIR}")
-
-model = YOLO("yolov8s-pose.pt")
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
+model = YOLO(str(POSE_MODEL_PATH))
+device = "cuda" if torch.cuda.is_available() else "cpu"
 print(f"Using device: {device}")
-print(f"Using video: {video_path}")
+print(f"Using pose model: {POSE_MODEL_PATH}")
+print(f"Using video: {VIDEO_PATH}")
 model.to(device)
 
 tracker = SimpleTracker()
 history = {}
 
-print("Starting pose analysis. Press 'q' to exit.")
+while cap.isOpened():
+    success, frame = cap.read()
+    if not success:
+        break
 
-for result in model(
-    str(video_path),
-    stream=True,
-    classes=[0],
-    verbose=False,
-):
+    result = model(
+        frame,
+        classes=[0],
+        verbose=False,
+    )[0]
     annotated_frame = result.plot()
 
     if result.keypoints is not None and result.boxes is not None and len(result.boxes) > 0:
@@ -69,15 +68,14 @@ for result in model(
         for detection in tracked_detections:
             result_index = int(detection["result_index"])
             kp = keypoints[result_index]
-
             right_wrist_y = kp[10][1]
             right_ankle_x = kp[16][0]
 
             if right_wrist_y == 0 or right_ankle_x == 0:
                 continue
 
-            action = "Idle"
             track_id = int(detection["track_id"])
+            action = "Idle"
             if track_id in history:
                 delta_wrist_y = abs(right_wrist_y - history[track_id]["wrist_y"])
                 delta_ankle_x = abs(right_ankle_x - history[track_id]["ankle_x"])
@@ -90,13 +88,21 @@ for result in model(
             history[track_id] = {"wrist_y": right_wrist_y, "ankle_x": right_ankle_x}
 
             x1, y1 = int(bboxes[result_index][0]), int(bboxes[result_index][1])
-            cv2.putText(annotated_frame, f"ID {track_id} | Action: {action}", (x1, y1 - 10),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 3)
+            cv2.putText(
+                annotated_frame,
+                f"ID {track_id} | Action: {action}",
+                (x1, y1 - 10),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.8,
+                (0, 255, 255),
+                3,
+            )
 
     resized_frame = cv2.resize(annotated_frame, (1280, 720))
-    cv2.imshow("YOLOv8 Pose Logic", resized_frame)
+    cv2.imshow("Pose Actions Demo", resized_frame)
 
-    if cv2.waitKey(1) & 0xFF == ord('q'):
+    if cv2.waitKey(1) & 0xFF == ord("q"):
         break
 
+cap.release()
 cv2.destroyAllWindows()
