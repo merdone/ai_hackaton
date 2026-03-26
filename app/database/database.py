@@ -95,6 +95,16 @@ class LogisticsDatabase:
         """
         return self.execute_query(query)
 
+    def count_operations_log(self) -> int:
+        rows = self.execute_query("SELECT COUNT(*) AS cnt FROM operations_log")
+        return int(rows[0]["cnt"]) if rows else 0
+
+    def clear_operations_log(self) -> int:
+        total = self.count_operations_log()
+        if total > 0:
+            self.execute_query("DELETE FROM operations_log", fetch=False)
+        return total
+
     def get_worker_history(self, worker_id, start_time=None, end_time=None):
         """
         Gets the event history for a specific worker, optionally filtered by a time range.

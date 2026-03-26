@@ -1,19 +1,20 @@
+import os
+import sys
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import TypedDict
+from typing import Any, TypedDict
 
 import cv2
+import joblib
 import pandas as pd
 import streamlit as st
 from ultralytics import YOLO
 
-import sys
-import os
-
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from app.database.database import db
+from app.settings import AppSettings, get_app_settings
 from worker.settings import get_settings
 from worker.yolo_final import (
     build_scaled_zones,
@@ -31,7 +32,51 @@ class ActiveEventState(TypedDict):
     features: dict[str, float]
 
 
-def process_live_stream(video_placeholder, worker_settings):
+@st.cache_resource
+def load_rf_model(model_path: str):
+    path = Path(model_path)
+    if not path.exists():
+        return None
+    return joblib.load(path)
+
+
+def predict_action(
+    model: Any,
+    features: dict[str, float],
+    train_features: tuple[str, ...],
+    fallback_confidence: float,
+) -> tuple[str, float]:
+    if model is None:
+        return "Detected (No ML)", fallback_confidence
+
+    feature_row = {name: float(features.get(name, 0.0)) for name in train_features}
+    X = pd.DataFrame([feature_row], columns=list(train_features))
+
+    predicted_label = str(model.predict(X)[0])
+    confidence = fallback_confidence
+    if hasattr(model, "predict_proba"):
+        confidence = float(model.predict_proba(X).max())
+    return predicted_label, confidence
+
+
+def draw_action_label(frame, cx: float, cy: float, w: float, h: float, action: str, confidence: float) -> None:
+    x1 = int(cx - (w / 2.0))
+    y1 = int(cy - (h / 2.0))
+    label_y = max(18, y1 - 50)
+    label = f"{action} ({confidence:.2f})"
+    cv2.putText(
+        frame,
+        label,
+        (x1, label_y),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        1,
+        (255, 255, 255),
+        3,
+        cv2.LINE_AA,
+    )
+
+
+def process_live_stream(video_placeholder, worker_settings, app_settings: AppSettings, rf_model: Any):
     """Live-потік з тією ж CV-логікою, що і в yolo_final (зони + нормалізовані фічі)."""
     yolo_model = YOLO(worker_settings.yolo_model_path)
     yolo_model.to(worker_settings.yolo_device)
@@ -99,6 +144,21 @@ def process_live_stream(video_placeholder, worker_settings):
                         speed_relative_change = speed_relative - prev_speed
                         aspect_ratio_change = current_aspect_ratio - prev_ar
 
+                    current_features = {
+                        "speed_relative": round(float(speed_relative), 4),
+                        "speed_relative_change": round(float(speed_relative_change), 4),
+                        "aspect_ratio": round(float(current_aspect_ratio), 4),
+                        "aspect_ratio_change": round(float(aspect_ratio_change), 4),
+                    }
+
+                    current_action, current_action_conf = predict_action(
+                        model=rf_model,
+                        features=current_features,
+                        train_features=app_settings.train_features,
+                        fallback_confidence=conf,
+                    )
+                    draw_action_label(annotated_frame, cx, cy, w, h, current_action, current_action_conf)
+
                     history[track_id] = {
                         "center_x": float(cx),
                         "center_y": float(cy),
@@ -106,40 +166,39 @@ def process_live_stream(video_placeholder, worker_settings):
                         "speed_relative": float(speed_relative),
                     }
 
-                    # Лог подій у БД з тією ж структурою фічей, що в train/preprocess.
                     if track_id not in active_events:
                         active_events[track_id] = {
                             "start_time": now,
                             "confidences": [conf],
                             "zone": current_zone,
-                            "features": {
-                                "speed_relative": round(float(speed_relative), 4),
-                                "speed_relative_change": round(float(speed_relative_change), 4),
-                                "aspect_ratio": round(float(current_aspect_ratio), 4),
-                                "aspect_ratio_change": round(float(aspect_ratio_change), 4),
-                            },
+                            "features": current_features,
                         }
                     else:
                         state = active_events[track_id]
                         state["confidences"].append(conf)
                         state["zone"] = current_zone
-                        state["features"] = {
-                            "speed_relative": round(float(speed_relative), 4),
-                            "speed_relative_change": round(float(speed_relative_change), 4),
-                            "aspect_ratio": round(float(current_aspect_ratio), 4),
-                            "aspect_ratio_change": round(float(aspect_ratio_change), 4),
-                        }
+                        state["features"] = current_features
 
                         if (now - state["start_time"]).total_seconds() > 3:
                             avg_conf = sum(state["confidences"]) / max(len(state["confidences"]), 1)
+                            predicted_class, predicted_conf = predict_action(
+                                model=rf_model,
+                                features=state["features"],
+                                train_features=app_settings.train_features,
+                                fallback_confidence=float(avg_conf),
+                            )
+
+                            metadata = dict(state["features"])
+                            metadata["detector_avg_confidence"] = round(float(avg_conf), 4)
+
                             db.log_event(
                                 worker_id=f"Worker_{track_id}",
-                                classification="Detected (No ML)",
+                                classification=predicted_class,
                                 zone=state["zone"],
                                 start_time=state["start_time"],
                                 end_time=now,
-                                confidence=float(avg_conf),
-                                metadata=state["features"],
+                                confidence=float(predicted_conf),
+                                metadata=metadata,
                             )
                             active_events[track_id] = {
                                 "start_time": now,
@@ -149,7 +208,7 @@ def process_live_stream(video_placeholder, worker_settings):
                             }
 
             annotated_rgb = cv2.cvtColor(annotated_frame, cv2.COLOR_BGR2RGB)
-            video_placeholder.image(annotated_rgb, channels="RGB", width='stretch')
+            video_placeholder.image(annotated_rgb, channels="RGB", width="stretch")
             time.sleep(0.01)
     finally:
         cap.release()
@@ -189,19 +248,9 @@ def show_observability_dashboard():
         st.error(f"Помилка при зчитуванні БД: {e}")
 
 
-#TODO перенести в файл БД
-def clear_operations_log() -> int:
-    rows = db.execute_query("SELECT COUNT(*) AS cnt FROM operations_log")
-    total = int(rows[0]["cnt"]) if rows else 0
-    if total > 0:
-        db.execute_query("DELETE FROM operations_log", fetch=False)
-    return total
-
-
 def render_safe_db_cleanup() -> None:
     st.subheader("Безопасная очистка БД")
-    rows = db.execute_query("SELECT COUNT(*) AS cnt FROM operations_log")
-    total = int(rows[0]["cnt"]) if rows else 0
+    total = db.count_operations_log()
     st.caption(f"Записей в operations_log: {total}")
 
     confirm_checked = st.checkbox("Подтверждаю удаление всех событий из БД")
@@ -209,13 +258,13 @@ def render_safe_db_cleanup() -> None:
 
     if st.button("Очистить БД", type="primary"):
         if not confirm_checked:
-            st.warning("Поставте галочку подтверждения.")
+            st.warning("Поставте галочку підтвердження.")
             return
         if confirm_phrase.strip() != "DELETE":
             st.warning("Неверная фраза подтверждения. Введите DELETE.")
             return
 
-        removed = clear_operations_log()
+        removed = db.clear_operations_log()
         st.success(f"Удалено записей: {removed}")
         st.rerun()
 
@@ -224,14 +273,23 @@ def main():
     st.set_page_config(page_title="Live Аналіз Логістики", layout="wide")
     st.title("🎥 Інструмент Live-аналізу")
 
-    # Гарантуємо, що таблиця існує
     db.init_schema()
 
     worker_settings = get_settings()
+    app_settings = get_app_settings()
 
     if not Path(worker_settings.yolo_model_path).exists():
         st.error(f"YOLO модель не знайдена: {worker_settings.yolo_model_path}")
         st.stop()
+
+    rf_model = None
+    rf_error = None
+    try:
+        rf_model = load_rf_model(str(app_settings.model_file))
+        if rf_model is None:
+            rf_error = f"RF модель не найдена: {app_settings.model_file}"
+    except Exception as exc:
+        rf_error = f"Не вдалося завантажити RF модель: {exc}"
 
     if "is_running" not in st.session_state:
         st.session_state.is_running = False
@@ -241,14 +299,19 @@ def main():
     with col_controls:
         st.header("Управління")
         st.write(f"**Джерело:** `{worker_settings.yolo_video_path}`")
-        st.write(f"**ML Класифікація:** Вимкнена 🔴")
+        if rf_model is not None:
+            st.write("**ML Класифікація:** RandomForest увімкнена 🟢")
+        else:
+            st.write("**ML Класифікація:** fallback без ML 🟠")
+            if rf_error:
+                st.caption(rf_error)
 
         if not st.session_state.is_running:
-            if st.button("▶️ Почати Live Аналіз", width='stretch'):
+            if st.button("▶️ Почати Live Аналіз", width="stretch"):
                 st.session_state.is_running = True
                 st.rerun()
         else:
-            if st.button("⏹ Зупинити Аналіз", type="primary", width='stretch'):
+            if st.button("⏹ Зупинити Аналіз", type="primary", width="stretch"):
                 st.session_state.is_running = False
                 st.rerun()
 
@@ -263,7 +326,7 @@ def main():
         video_placeholder = st.empty()
 
         if st.session_state.is_running:
-            process_live_stream(video_placeholder, worker_settings)
+            process_live_stream(video_placeholder, worker_settings, app_settings, rf_model)
         else:
             video_placeholder.info("Натисніть 'Почати Live Аналіз' для запуску відеопотоку.")
 
