@@ -43,6 +43,17 @@ def get_video_meta(video_path: Path) -> tuple[float, int]:
     return float(effective_fps), frame_count
 
 
+def get_timeline_meta(settings: AppSettings) -> tuple[float, int, Path]:
+    # Timeline must be based on the same file as st.video() to avoid UX desync.
+    if settings.preview_video_path.exists():
+        fps, frames = get_video_meta(settings.preview_video_path)
+        if frames > 0:
+            return fps, frames, settings.preview_video_path
+
+    fps, frames = get_video_meta(settings.original_video_path)
+    return fps, frames, settings.original_video_path
+
+
 def select_frame_range(
         fps: float,
         slider_key: str,
@@ -108,13 +119,14 @@ def run_training(settings: AppSettings) -> None:
 
 def main() -> None:
     settings = get_app_settings()
-    fps, video_frames = get_video_meta(settings.original_video_path)
 
     st.set_page_config(page_title="Разметка и Обучение", layout="wide")
     st.title("Инструмент обучения (День 3)")
 
+    fps, video_frames, timeline_source = get_timeline_meta(settings)
+
     features_version = get_file_version_token(settings.features_file)
-    video_version = get_file_version_token(settings.original_video_path)
+    video_version = get_file_version_token(settings.preview_video_path)
     df_features = load_features(str(settings.features_file), features_version)
     if df_features.empty:
         st.warning("Нет данных от YOLO. Сначала запусти скрипт препроцессинга (День 2).")
@@ -126,6 +138,18 @@ def main() -> None:
         st.video(str(settings.preview_video_path))
     else:
         st.error(f"Не могу найти видео по пути: {settings.preview_video_path}")
+
+    if timeline_source != settings.preview_video_path:
+        st.warning(
+            "Не удалось прочитать длительность preview-видео, шкала времени взята из original_video_path. "
+            "Проверь, что preview сгенерировано и доступно."
+        )
+
+    if video_frames > 0 and int(df_features["frame_id"].max()) > video_frames:
+        st.warning(
+            "Фичи длиннее текущего preview-видео. Вероятно, `features_temp.json` и `preview_with_ids.mp4` "
+            "из разных запусков."
+        )
 
     st.divider()
 
@@ -142,7 +166,11 @@ def main() -> None:
         features_min_frame = int(df_features["frame_id"].min())
         features_max_frame = int(df_features["frame_id"].max())
         global_min_frame = min(0, features_min_frame)
-        global_max_frame = max(features_max_frame, max(video_frames - 1, 0))
+
+        if video_frames > 0:
+            global_max_frame = min(features_max_frame, max(video_frames - 1, 0))
+        else:
+            global_max_frame = max(features_max_frame, 0)
 
         selected_frames = select_frame_range(
             fps=fps,
