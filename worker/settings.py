@@ -35,6 +35,7 @@ class WorkerSettings:
     yolo_preview_width: int
     yolo_preview_height: int
     yolo_window_name: str
+    zone_annotator_window_name: str
     yolo_show_window: bool
     yolo_fourcc: str
 
@@ -92,6 +93,7 @@ def get_settings() -> WorkerSettings:
         yolo_preview_width=1280,
         yolo_preview_height=720,
         yolo_window_name="Features Extractor",
+        zone_annotator_window_name="Zone Annotator",
         yolo_show_window=True,
         yolo_fourcc="avc1",
     )
@@ -118,6 +120,7 @@ def get_settings() -> WorkerSettings:
         yolo_preview_width=int(os.getenv("WORKER_YOLO_PREVIEW_WIDTH", str(defaults.yolo_preview_width))),
         yolo_preview_height=int(os.getenv("WORKER_YOLO_PREVIEW_HEIGHT", str(defaults.yolo_preview_height))),
         yolo_window_name=os.getenv("WORKER_YOLO_WINDOW_NAME", defaults.yolo_window_name),
+        zone_annotator_window_name = os.getenv("WORKER_ZONE_ANNOTATOR_WINDOW_NAME", defaults.zone_annotator_window_name),
         yolo_show_window=_parse_bool(os.getenv("WORKER_YOLO_SHOW_WINDOW", str(defaults.yolo_show_window)),
                                      defaults.yolo_show_window),
         yolo_fourcc=os.getenv("WORKER_YOLO_FOURCC", defaults.yolo_fourcc),

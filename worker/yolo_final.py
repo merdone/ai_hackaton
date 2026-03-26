@@ -111,7 +111,6 @@ def save_features(features: list[dict[str, float | int]], output_path: str) -> N
 
 def main() -> None:
     settings = get_settings()
-    print(settings)
     features = extract_features(settings)
     save_features(features, settings.yolo_features_output_path)
 
