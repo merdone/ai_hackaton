@@ -25,7 +25,7 @@ def get_file_version_token(path: Path) -> int:
 
 @st.cache_data
 def load_features(features_file: str, version_token: int) -> pd.DataFrame:
-    _ = version_token  # token is used only to invalidate cache when file changes
+    _ = version_token
     path = Path(features_file)
     if path.exists():
         with path.open("r", encoding="utf-8") as f:
@@ -44,7 +44,6 @@ def get_video_meta(video_path: Path) -> tuple[float, int]:
 
 
 def get_timeline_meta(settings: AppSettings) -> tuple[float, int, Path]:
-    # Timeline must be based on the same file as st.video() to avoid UX desync.
     if settings.preview_video_path.exists():
         fps, frames = get_video_meta(settings.preview_video_path)
         if frames > 0:
@@ -89,12 +88,26 @@ def append_to_dataset(dataset_file: Path, df_selected: pd.DataFrame) -> None:
     df_combined.to_csv(dataset_file, index=False)
 
 
+def clear_dataset_file(dataset_file: Path) -> bool:
+    if not dataset_file.exists():
+        return False
+
+    dataset_file.unlink()
+    return True
+
+
 def run_training(settings: AppSettings) -> None:
     if not settings.dataset_file.exists():
         st.info("Сначала разметьте немного данных, чтобы запустить обучение.")
         return
 
     df_dataset = pd.read_csv(settings.dataset_file)
+
+    required_features = list(settings.train_features)
+    missing_features = [col for col in required_features if col not in df_dataset.columns]
+    if missing_features:
+        st.error(f"В датасете отсутствуют колонки для обучения: {', '.join(missing_features)}")
+        return
 
     col_stat1, col_stat2 = st.columns(2)
     with col_stat1:
@@ -104,7 +117,7 @@ def run_training(settings: AppSettings) -> None:
         st.dataframe(df_dataset["action"].value_counts())
 
     if st.button("Обучить модель"):
-        X = df_dataset[list(settings.train_features)]
+        X = df_dataset[required_features]
         y = df_dataset["action"]
 
         clf = RandomForestClassifier(n_estimators=100, random_state=42)
@@ -201,6 +214,17 @@ def main() -> None:
 
         append_to_dataset(settings.dataset_file, df_selected)
         st.success(f"Успешно! {len(df_selected)} строк размечено как '{action}'.")
+
+    st.caption(f"Текущий файл датасета: `{settings.dataset_file}`")
+    confirm_clear = st.checkbox("Подтверждаю очистку датасета")
+    if st.button("Очистить датасет"):
+        if not confirm_clear:
+            st.warning("Поставь галочку подтверждения перед очисткой.")
+        elif clear_dataset_file(settings.dataset_file):
+            st.success("Датасет очищен.")
+            st.rerun()
+        else:
+            st.info("Файл датасета уже отсутствует.")
 
     st.divider()
 

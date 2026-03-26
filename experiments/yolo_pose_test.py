@@ -17,7 +17,7 @@ while cap.isOpened():
     if not success: break
 
     # Трекаем людей и их скелеты
-    results = model.track(frame, persist=True, tracker="bytetrack.yaml", classes=[0])
+    results = model.track(frame, persist=True, tracker="bytetrack1.yaml", classes=[0])
     annotated_frame = results[0].plot()
 
     # Проверяем, нашел ли он скелеты и выдал ли ID

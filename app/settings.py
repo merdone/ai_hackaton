@@ -21,6 +21,7 @@ class AppSettings:
     actions: tuple[str, ...] = ("Idle", "Moving", "Sorting")
     train_features: tuple[str, ...] = (
         "speed_relative",
+        "speed_relative_change",
         "aspect_ratio",
         "aspect_ratio_change",
     )

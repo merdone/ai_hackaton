@@ -182,13 +182,17 @@ def extract_features(settings: WorkerSettings) -> list[dict[str, float | int | s
                     current_zone = detect_zone_for_bbox_xywh(cx, cy, frame_zones or [])
                     draw_zone_highlight(annotated_frame, cx, cy, w, h, current_zone)
 
+                    speed_relative = 0.0
+                    speed_relative_change = 0.0
                     if track_id in history:
                         prev_cx = history[track_id]["center_x"]
                         prev_cy = history[track_id]["center_y"]
                         prev_ar = history[track_id]["aspect_ratio"]
+                        prev_speed = history[track_id].get("speed_relative", 0.0)
 
                         distance = math.hypot(cx - prev_cx, cy - prev_cy)
                         speed_relative = distance / h if h > 0 else 0.0
+                        speed_relative_change = speed_relative - prev_speed
                         aspect_ratio_change = current_aspect_ratio - prev_ar
 
                         extracted_features.append(
@@ -196,6 +200,7 @@ def extract_features(settings: WorkerSettings) -> list[dict[str, float | int | s
                                 "frame_id": int(cap.get(cv2.CAP_PROP_POS_FRAMES)),
                                 "track_id": int(track_id),
                                 "speed_relative": float(round(speed_relative, 4)),
+                                "speed_relative_change": float(round(speed_relative_change, 4)),
                                 "aspect_ratio": float(round(current_aspect_ratio, 4)),
                                 "aspect_ratio_change": float(round(aspect_ratio_change, 4)),
                                 "zone_intersection": current_zone,
@@ -206,6 +211,7 @@ def extract_features(settings: WorkerSettings) -> list[dict[str, float | int | s
                         "center_x": float(cx),
                         "center_y": float(cy),
                         "aspect_ratio": float(current_aspect_ratio),
+                        "speed_relative": float(speed_relative),
                     }
 
             out.write(annotated_frame)

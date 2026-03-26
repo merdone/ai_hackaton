@@ -15,7 +15,7 @@ while cap.isOpened():
     success, frame = cap.read()
     if not success: break
 
-    results = model.track(frame, persist=True, tracker="bytetrack.yaml", classes=[0])
+    results = model.track(frame, persist=True, tracker="bytetrack1.yaml", classes=[0])
     annotated_frame = results[0].plot()
 
     if results[0].boxes.id is not None:
