@@ -38,6 +38,8 @@ class WorkerSettings:
     zone_annotator_window_name: str
     yolo_show_window: bool
     yolo_fourcc: str
+    yolo_zones_path: str
+    yolo_draw_zones: bool
 
 
 def _parse_csv(value: str, fallback: tuple[str, ...]) -> tuple[str, ...]:
@@ -96,6 +98,8 @@ def get_settings() -> WorkerSettings:
         zone_annotator_window_name="Zone Annotator",
         yolo_show_window=True,
         yolo_fourcc="avc1",
+        yolo_zones_path=str(project_root / "data" / "output" / "zones.json"),
+        yolo_draw_zones=True,
     )
 
     return WorkerSettings(
@@ -124,4 +128,7 @@ def get_settings() -> WorkerSettings:
         yolo_show_window=_parse_bool(os.getenv("WORKER_YOLO_SHOW_WINDOW", str(defaults.yolo_show_window)),
                                      defaults.yolo_show_window),
         yolo_fourcc=os.getenv("WORKER_YOLO_FOURCC", defaults.yolo_fourcc),
+        yolo_zones_path=_resolve_path(os.getenv("WORKER_YOLO_ZONES_PATH", defaults.yolo_zones_path), project_root),
+        yolo_draw_zones=_parse_bool(os.getenv("WORKER_YOLO_DRAW_ZONES", str(defaults.yolo_draw_zones)),
+                                    defaults.yolo_draw_zones),
     )
