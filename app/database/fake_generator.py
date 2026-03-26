@@ -1,7 +1,7 @@
 import random
 from datetime import datetime, timedelta
 # Импортируем готовый инстанс БД и класс из твоего файла
-from db import db 
+from database import db
 
 def generate_synthetic_shift(start_time_str="2026-03-25T08:00:00", hours=8):
     """Генерирует полную смену работы терминала и записывает в БД"""

@@ -18,6 +18,7 @@ class AppSettings:
     model_file: Path
     preview_video_path: Path
     original_video_path: Path
+    database_path: Path
     actions: tuple[str, ...] = ("Idle", "Moving", "Sorting")
     train_features: tuple[str, ...] = (
         "speed_relative",
@@ -42,6 +43,7 @@ def get_app_settings() -> AppSettings:
     model_file = _resolve_path(os.getenv("APP_MODEL_FILE", "../models/rf_v1.pkl"), PROJECT_ROOT)
     preview_video_path = _resolve_path(os.getenv("APP_PREVIEW_VIDEO_PATH", "../data/preview_with_ids.mp4"), PROJECT_ROOT)
     original_video_path = _resolve_path(os.getenv("APP_ORIGINAL_VIDEO_PATH", "../data/video3.mkv"), PROJECT_ROOT)
+    database_path = _resolve_path(os.getenv("APP_DB_PATH", "../data/events.db"), PROJECT_ROOT)
 
     return AppSettings(
         base_dir=base_dir,
@@ -50,4 +52,5 @@ def get_app_settings() -> AppSettings:
         model_file=model_file,
         preview_video_path=preview_video_path,
         original_video_path=original_video_path,
+        database_path = database_path,
     )

@@ -7,7 +7,10 @@ import cv2
 import numpy as np
 from ultralytics import YOLO
 
-from settings import WorkerSettings, get_settings
+try:
+    from .settings import WorkerSettings, get_settings
+except ImportError:
+    from settings import WorkerSettings, get_settings
 
 
 class RenderZone(TypedDict):

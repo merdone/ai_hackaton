@@ -1,7 +1,7 @@
 import sqlite3
 import json
-from datetime import datetime
-from worker.database.config import config
+
+from app.settings import get_app_settings
 
 
 class LogisticsDatabase:
@@ -143,16 +143,4 @@ class LogisticsDatabase:
         return self.execute_query(query, (worker_id, st_formatted, et_formatted))
 
 
-db = LogisticsDatabase(config.DATABASE_PATH)
-
-if __name__ == "__main__":
-    from datetime import datetime, timedelta
-
-    end_time = datetime.now()
-    start_time = end_time - timedelta(hours=8)
-
-    worker_logs = db.get_worker_history("W-042", start_time, end_time)
-
-    efficiency = db.get_worker_efficiency("W-042", start_time, end_time)
-
-    morning_rush = db.get_events_by_time_range("2026-03-25T10:00:00", "2026-03-25T12:00:00")
+db = LogisticsDatabase(get_app_settings().database_path)

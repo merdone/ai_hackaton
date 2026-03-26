@@ -8,4 +8,5 @@ datasets/
 data/
 *.mp4
 *.mkv
+*.db
 data/events.db
