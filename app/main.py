@@ -9,23 +9,12 @@ from sklearn.ensemble import RandomForestClassifier
 
 from settings import AppSettings, get_app_settings
 
-
-# Keep only true legacy aliases here; Sorting is now a standalone class.
-ACTION_ALIASES = {}
-
-
-def normalize_action_value(value: object) -> str:
-    action = str(value).strip()
-    return ACTION_ALIASES.get(action, action)
-
-
-def normalize_action_column(df: pd.DataFrame) -> pd.DataFrame:
-    if "action" not in df.columns:
-        return df
-
-    normalized = df.copy()
-    normalized["action"] = normalized["action"].map(normalize_action_value)
-    return normalized
+try:
+    from utils.action_normalization import normalize_action_column
+    from utils.path_sources import get_file_version_token
+except ImportError:
+    from app.utils.action_normalization import normalize_action_column
+    from app.utils.path_sources import get_file_version_token
 
 
 def get_video_fps(video_path: Path) -> float:
@@ -33,12 +22,6 @@ def get_video_fps(video_path: Path) -> float:
     fps = cap.get(cv2.CAP_PROP_FPS)
     cap.release()
     return fps if fps > 0 else 25.0
-
-
-def get_file_version_token(path: Path) -> int:
-    if not path.exists():
-        return 0
-    return path.stat().st_mtime_ns
 
 
 @st.cache_data
@@ -182,7 +165,7 @@ def main() -> None:
 
     if video_frames > 0 and int(df_features["frame_id"].max()) > video_frames:
         st.warning(
-            "Фічі довші за поточне preview-відео. Ймовірно, `features_temp.json` і `preview_with_ids.mp4` "
+            "Фічі довші за поточне preview-відео. Ймовірно, `features_temp_video_3.json` і `preview_with_ids.mp4` "
             "із різних запусків."
         )
 

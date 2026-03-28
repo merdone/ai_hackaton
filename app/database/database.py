@@ -33,14 +33,28 @@ class LogisticsDatabase:
 
         cursor = self.connection.cursor()
         try:
-            if params:
+            if params is not None:
                 cursor.execute(query, params)
             else:
                 cursor.execute(query)
-            self.connection.commit()
-            return [dict(row) for row in cursor.fetchall()] if fetch else None
+
+            rows = [dict(row) for row in cursor.fetchall()] if fetch else None
+
+            # Commit only mutating statements; SELECT does not need transaction commit.
+            is_read_query = query.lstrip().upper().startswith("SELECT")
+            if not is_read_query:
+                try:
+                    self.connection.commit()
+                except sqlite3.OperationalError as commit_error:
+                    if "no transaction is active" not in str(commit_error).lower():
+                        raise
+
+            return rows
         except sqlite3.Error as e:
-            self.connection.rollback()
+            try:
+                self.connection.rollback()
+            except sqlite3.OperationalError:
+                pass
             print(f"Database error: {e}")
             raise
 

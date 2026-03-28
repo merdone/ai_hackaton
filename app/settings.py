@@ -38,7 +38,7 @@ def _resolve_path(path_value: str, base_dir: Path) -> Path:
 def get_app_settings() -> AppSettings:
     base_dir = Path(__file__).resolve().parent
 
-    features_file = _resolve_path(os.getenv("APP_FEATURES_FILE", "../data/features_temp.json"), PROJECT_ROOT)
+    features_file = _resolve_path(os.getenv("APP_FEATURES_FILE", "../data/features_temp_video_3.json"), PROJECT_ROOT)
     dataset_file = _resolve_path(os.getenv("APP_DATASET_FILE", "../data/labeled_dataset.csv"), PROJECT_ROOT)
     model_file = _resolve_path(os.getenv("APP_MODEL_FILE", "../models/rf_v1.pkl"), PROJECT_ROOT)
     preview_video_path = _resolve_path(os.getenv("APP_PREVIEW_VIDEO_PATH", "../data/preview_with_ids.mp4"), PROJECT_ROOT)
