@@ -60,13 +60,13 @@ def select_frame_range(
         max_frame: int,
 ) -> tuple[int, int]:
     if min_frame >= max_frame:
-        st.warning("Слишком мало кадров для выбора интервала.")
+        st.warning("Замало кадрів для вибору інтервалу.")
         return min_frame, max_frame
 
     min_sec = float(min_frame / fps)
     max_sec = float(max_frame / fps)
     selected_sec = st.slider(
-        "Интервал (секунды):",
+        "Інтервал (секунди):",
         min_value=min_sec,
         max_value=max_sec,
         value=(min_sec, max_sec),
@@ -98,7 +98,7 @@ def clear_dataset_file(dataset_file: Path) -> bool:
 
 def run_training(settings: AppSettings) -> None:
     if not settings.dataset_file.exists():
-        st.info("Сначала разметьте немного данных, чтобы запустить обучение.")
+        st.info("Спочатку розмітьте трохи даних, щоб запустити навчання.")
         return
 
     df_dataset = pd.read_csv(settings.dataset_file)
@@ -106,17 +106,17 @@ def run_training(settings: AppSettings) -> None:
     required_features = list(settings.train_features)
     missing_features = [col for col in required_features if col not in df_dataset.columns]
     if missing_features:
-        st.error(f"В датасете отсутствуют колонки для обучения: {', '.join(missing_features)}")
+        st.error(f"У датасеті відсутні колонки для навчання: {', '.join(missing_features)}")
         return
 
     col_stat1, col_stat2 = st.columns(2)
     with col_stat1:
-        st.write(f"**Размер датасета:** {len(df_dataset)} записей")
+        st.write(f"**Розмір датасету:** {len(df_dataset)} записів")
     with col_stat2:
-        st.write("**Баланс классов:**")
+        st.write("**Баланс класів:**")
         st.dataframe(df_dataset["action"].value_counts())
 
-    if st.button("Обучить модель"):
+    if st.button("Навчити модель"):
         X = df_dataset[required_features]
         y = df_dataset["action"]
 
@@ -126,15 +126,15 @@ def run_training(settings: AppSettings) -> None:
         settings.model_file.parent.mkdir(parents=True, exist_ok=True)
         joblib.dump(clf, settings.model_file)
 
-        st.success(f"Модель успешно обучена и сохранена в `{settings.model_file}`!")
-        st.metric("Точность (Accuracy)", f"{clf.score(X, y):.2%}")
+        st.success(f"Модель успішно навчено та збережено у `{settings.model_file}`!")
+        st.metric("Точність (Accuracy)", f"{clf.score(X, y):.2%}")
 
 
 def main() -> None:
     settings = get_app_settings()
 
-    st.set_page_config(page_title="Разметка и Обучение", layout="wide")
-    st.title("Инструмент обучения (День 3)")
+    st.set_page_config(page_title="Розмітка та навчання", layout="wide")
+    st.title("Інструмент навчання (День 3)")
 
     fps, video_frames, timeline_source = get_timeline_meta(settings)
 
@@ -142,26 +142,26 @@ def main() -> None:
     video_version = get_file_version_token(settings.preview_video_path)
     df_features = load_features(str(settings.features_file), features_version)
     if df_features.empty:
-        st.warning("Нет данных от YOLO. Сначала запусти скрипт препроцессинга (День 2).")
+        st.warning("Немає даних від YOLO. Спочатку запусти скрипт препроцесингу (День 2).")
         st.stop()
 
-    st.header("1. Разметка действий")
+    st.header("1. Розмітка дій")
 
     if settings.preview_video_path.exists():
         st.video(str(settings.preview_video_path))
     else:
-        st.error(f"Не могу найти видео по пути: {settings.preview_video_path}")
+        st.error(f"Не можу знайти відео за шляхом: {settings.preview_video_path}")
 
     if timeline_source != settings.preview_video_path:
         st.warning(
-            "Не удалось прочитать длительность preview-видео, шкала времени взята из original_video_path. "
-            "Проверь, что preview сгенерировано и доступно."
+            "Не вдалося прочитати тривалість preview-відео, шкалу часу взято з original_video_path. "
+            "Перевір, що preview згенеровано та доступне."
         )
 
     if video_frames > 0 and int(df_features["frame_id"].max()) > video_frames:
         st.warning(
-            "Фичи длиннее текущего preview-видео. Вероятно, `features_temp.json` и `preview_with_ids.mp4` "
-            "из разных запусков."
+            "Фічі довші за поточне preview-відео. Ймовірно, `features_temp.json` і `preview_with_ids.mp4` "
+            "із різних запусків."
         )
 
     st.divider()
@@ -170,7 +170,7 @@ def main() -> None:
 
     with col1:
         track_ids = df_features["track_id"].unique()
-        selected_id = st.selectbox("ID рабочего:", track_ids)
+        selected_id = st.selectbox("ID працівника:", track_ids)
 
     with col2:
         id_data = df_features[df_features["track_id"] == selected_id]
@@ -193,16 +193,16 @@ def main() -> None:
         )
 
         if id_data.empty:
-            st.warning("Для выбранного ID нет треков в фичах.")
+            st.warning("Для вибраного ID немає треків у фічах.")
         else:
             id_min_sec = float(int(id_data["frame_id"].min()) / fps)
             id_max_sec = float(int(id_data["frame_id"].max()) / fps)
-            st.caption(f"ID {selected_id} найден в диапазоне: {id_min_sec:.1f}s - {id_max_sec:.1f}s")
+            st.caption(f"ID {selected_id} знайдено в діапазоні: {id_min_sec:.1f}s - {id_max_sec:.1f}s")
 
     with col3:
-        action = st.selectbox("Действие:", settings.actions)
+        action = st.selectbox("Дія:", settings.actions)
 
-    if st.button("Добавить в датасет"):
+    if st.button("Додати в датасет"):
         mask = (
                 (df_features["track_id"] == selected_id)
                 & (df_features["frame_id"] >= selected_frames[0])
@@ -213,22 +213,22 @@ def main() -> None:
         df_selected["action"] = action
 
         append_to_dataset(settings.dataset_file, df_selected)
-        st.success(f"Успешно! {len(df_selected)} строк размечено как '{action}'.")
+        st.success(f"Успішно! {len(df_selected)} рядків розмічено як '{action}'.")
 
-    st.caption(f"Текущий файл датасета: `{settings.dataset_file}`")
-    confirm_clear = st.checkbox("Подтверждаю очистку датасета")
-    if st.button("Очистить датасет"):
+    st.caption(f"Поточний файл датасету: `{settings.dataset_file}`")
+    confirm_clear = st.checkbox("Підтверджую очищення датасету")
+    if st.button("Очистити датасет"):
         if not confirm_clear:
-            st.warning("Поставь галочку подтверждения перед очисткой.")
+            st.warning("Постав позначку підтвердження перед очищенням.")
         elif clear_dataset_file(settings.dataset_file):
-            st.success("Датасет очищен.")
+            st.success("Датасет очищено.")
             st.rerun()
         else:
-            st.info("Файл датасета уже отсутствует.")
+            st.info("Файл датасету вже відсутній.")
 
     st.divider()
 
-    st.header("2. Обучение Random Forest")
+    st.header("2. Навчання Random Forest")
     run_training(settings)
 
 

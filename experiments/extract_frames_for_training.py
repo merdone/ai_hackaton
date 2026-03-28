@@ -1,22 +1,22 @@
 import cv2
 import os
 
-# Твои видеофайлы (поменяй названия на реальные)
+# Ваші відеофайли (замініть назви на реальні)
 videos = ['../data/video1.mkv', '../data/video2.mkv', '../data/video3.mkv']
 
-# Папка, где будут лежать картинки для разметки
+# Папка, де зберігатимуться зображення для розмітки
 output_dir = '../data/dataset/images'
 os.makedirs(output_dir, exist_ok=True)
 
 saved_count = 0
-frames_to_skip = 50  # Если видео 30 FPS, то 150 кадров = 1 кадр каждые 5 секунд
+frames_to_skip = 50  # Якщо відео 30 FPS, то 150 кадрів = 1 кадр кожні 5 секунд
 
-print("Начинаем нарезку видео. Жди...")
+print("Починаємо нарізку відео. Зачекай...")
 
 for video_path in videos:
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
-        print(f"Не смог открыть {video_path}")
+        print(f"Не вдалося відкрити {video_path}")
         continue
 
     frame_count = 0
@@ -25,7 +25,7 @@ for video_path in videos:
         if not success:
             break
 
-        # Сохраняем только каждый 150-й кадр
+        # Зберігаємо лише кожен 150-й кадр
         if frame_count % frames_to_skip == 0:
             filename = os.path.join(output_dir, f"frame_{saved_count:04d}.jpg")
             cv2.imwrite(filename, frame)
@@ -35,4 +35,4 @@ for video_path in videos:
 
     cap.release()
 
-print(f"Готово! Нарезано {saved_count} кадров и сохранено в {output_dir}")
+print(f"Готово! Нарізано {saved_count} кадрів і збережено в {output_dir}")

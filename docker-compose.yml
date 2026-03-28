@@ -1,18 +1,22 @@
 services:
-  ui:
+  training_ui:
     build:
       context: .
       dockerfile: app/Dockerfile
+    command: ["uv", "run", "streamlit", "run", "app/main.py", "--server.port=8501", "--server.address=0.0.0.0"]
     ports:
       - "8501:8501"
     volumes:
       - ./data:/app/data
-    depends_on:
-      - worker
+      - ./models:/app/models
 
-  worker:
+  live_ui:
     build:
       context: .
-      dockerfile: worker/Dockerfile
+      dockerfile: app/Dockerfile
+    command: ["uv", "run", "streamlit", "run", "app/live_analysis.py", "--server.port=8502", "--server.address=0.0.0.0"]
+    ports:
+      - "8502:8502"
     volumes:
       - ./data:/app/data
+      - ./models:/app/models

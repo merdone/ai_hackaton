@@ -77,7 +77,7 @@ def draw_action_label(frame, cx: float, cy: float, w: float, h: float, action: s
 
 
 def process_live_stream(video_placeholder, worker_settings, app_settings: AppSettings, rf_model: Any):
-    """Live-потік з тією ж CV-логікою, що і в yolo_final (зони + нормалізовані фічі)."""
+    """Live-потік із тією ж CV-логікою, що і в yolo_final (зони + нормалізовані фічі)."""
     yolo_model = YOLO(worker_settings.yolo_model_path)
     yolo_model.to(worker_settings.yolo_device)
 
@@ -239,39 +239,39 @@ def show_observability_dashboard():
 
         if recent_events:
             df_events = pd.DataFrame(recent_events)
-            # Додали height=600, щоб розгорнути таблицю на всю висоту і прибрати внутрішній скрол
+            # Розгортаємо таблицю на всю висоту, щоб прибрати внутрішній скрол.
             st.dataframe(df_events, width='stretch', height=600)
         else:
             st.info("Подій ще немає. Запустіть live-аналіз.")
 
     except Exception as e:
-        st.error(f"Помилка при зчитуванні БД: {e}")
+        st.error(f"Помилка під час зчитування БД: {e}")
 
 
 def render_safe_db_cleanup() -> None:
-    st.subheader("Безопасная очистка БД")
+    st.subheader("Безпечне очищення БД")
     total = db.count_operations_log()
-    st.caption(f"Записей в operations_log: {total}")
+    st.caption(f"Записів в operations_log: {total}")
 
-    confirm_checked = st.checkbox("Подтверждаю удаление всех событий из БД")
-    confirm_phrase = st.text_input("Введите DELETE для подтверждения", value="")
+    confirm_checked = st.checkbox("Підтверджую видалення всіх подій із БД")
+    confirm_phrase = st.text_input("Введіть DELETE для підтвердження", value="")
 
-    if st.button("Очистить БД", type="primary"):
+    if st.button("Очистити БД", type="primary"):
         if not confirm_checked:
-            st.warning("Поставте галочку підтвердження.")
+            st.warning("Поставте позначку підтвердження.")
             return
         if confirm_phrase.strip() != "DELETE":
-            st.warning("Неверная фраза подтверждения. Введите DELETE.")
+            st.warning("Невірна фраза підтвердження. Введіть DELETE.")
             return
 
         removed = db.clear_operations_log()
-        st.success(f"Удалено записей: {removed}")
+        st.success(f"Видалено записів: {removed}")
         st.rerun()
 
 
 def main():
-    st.set_page_config(page_title="Live Аналіз Логістики", layout="wide")
-    st.title("🎥 Інструмент Live-аналізу")
+    st.set_page_config(page_title="Live аналіз логістики", layout="wide")
+    st.title("🎥 Інструмент live-аналізу")
 
     db.init_schema()
 
@@ -287,7 +287,7 @@ def main():
     try:
         rf_model = load_rf_model(str(app_settings.model_file))
         if rf_model is None:
-            rf_error = f"RF модель не найдена: {app_settings.model_file}"
+            rf_error = f"RF модель не знайдена: {app_settings.model_file}"
     except Exception as exc:
         rf_error = f"Не вдалося завантажити RF модель: {exc}"
 
@@ -297,26 +297,26 @@ def main():
     col_video, col_controls = st.columns([3, 1])
 
     with col_controls:
-        st.header("Управління")
+        st.header("Керування")
         st.write(f"**Джерело:** `{worker_settings.yolo_video_path}`")
         if rf_model is not None:
-            st.write("**ML Класифікація:** RandomForest увімкнена 🟢")
+            st.write("**ML класифікація:** RandomForest увімкнено 🟢")
         else:
-            st.write("**ML Класифікація:** fallback без ML 🟠")
+            st.write("**ML класифікація:** резервний режим без ML 🟠")
             if rf_error:
                 st.caption(rf_error)
 
         if not st.session_state.is_running:
-            if st.button("▶️ Почати Live Аналіз", width="stretch"):
+            if st.button("▶️ Почати live-аналіз", width="stretch"):
                 st.session_state.is_running = True
                 st.rerun()
         else:
-            if st.button("⏹ Зупинити Аналіз", type="primary", width="stretch"):
+            if st.button("⏹ Зупинити аналіз", type="primary", width="stretch"):
                 st.session_state.is_running = False
                 st.rerun()
 
         st.divider()
-        if st.button("🔄 Оновити Дашборд", width='stretch'):
+        if st.button("🔄 Оновити дашборд", width='stretch'):
             pass
 
         st.divider()
@@ -328,7 +328,7 @@ def main():
         if st.session_state.is_running:
             process_live_stream(video_placeholder, worker_settings, app_settings, rf_model)
         else:
-            video_placeholder.info("Натисніть 'Почати Live Аналіз' для запуску відеопотоку.")
+            video_placeholder.info("Натисніть 'Почати live-аналіз' для запуску відеопотоку.")
 
     st.divider()
     show_observability_dashboard()

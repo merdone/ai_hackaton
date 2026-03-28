@@ -2,7 +2,7 @@ import cv2
 import math
 from ultralytics import YOLO
 
-# рабочая версия бежит/идет/стоит
+# Робоча версія: біжить/йде/стоїть
 
 model = YOLO('../models/yolov8m.pt')
 model.to('cuda')
@@ -20,28 +20,28 @@ while cap.isOpened():
 
     if results[0].boxes.id is not None:
         track_ids = results[0].boxes.id.int().cpu().tolist()
-        bboxes = results[0].boxes.xywh.cpu().numpy()  # Берем формат X_center, Y_center, Width, Height
+        bboxes = results[0].boxes.xywh.cpu().numpy()  # Беремо формат X_center, Y_center, Width, Height
 
         for i, track_id in enumerate(track_ids):
             cx, cy, w, h = bboxes[i]
-            # 1. Считаем Aspect Ratio (Отношение ширины к высоте)
-            # Если человек стоит прямо, h > w (соотношение < 1).
-            # Если наклонился за коробкой, w может стать больше h (соотношение > 1).
+            # 1. Рахуємо Aspect Ratio (відношення ширини до висоти)
+            # Якщо людина стоїть прямо, h > w (співвідношення < 1).
+            # Якщо нахилилася за коробкою, w може стати більшою за h (співвідношення > 1).
             current_aspect_ratio = w / h
 
             if track_id in history:
                 prev_cx = history[track_id]['center_x']
                 prev_cy = history[track_id]['center_y']
 
-                # 2. Считаем пройденное расстояние по теореме Пифагора
+                # 2. Рахуємо пройдену відстань за теоремою Піфагора
                 distance = math.hypot(cx - prev_cx, cy - prev_cy)
 
-                # 3. Нормализуем скорость (speed_relative из вашего ТЗ)
-                # Делим на высоту рамки (h), чтобы скорость не зависела от того,
-                # близко человек к камере или далеко.
+                # 3. Нормалізуємо швидкість (speed_relative з вашого ТЗ)
+                # Ділимо на висоту рамки (h), щоб швидкість не залежала від того,
+                # близько людина до камери чи далеко.
                 # speed_relative = distance / h
                 speed_relative = distance
-                # Выводим цифры прямо на видео для дебага (округляем для красоты)
+                # Виводимо цифри прямо на відео для дебагу (округлюємо для зручності)
                 x1 = int(cx - w / 2)
                 y1 = int(cy - h / 2)
 
@@ -49,7 +49,7 @@ while cap.isOpened():
                 cv2.putText(annotated_frame, text, (x1, y1 - 100),
                             cv2.FONT_HERSHEY_SIMPLEX, 2, (255, 0, 255), 10)
 
-            # Обновляем историю для следующего кадра
+            # Оновлюємо історію для наступного кадру
             history[track_id] = {
                 'center_x': cx,
                 'center_y': cy,

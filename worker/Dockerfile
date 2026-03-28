@@ -4,11 +4,11 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
 WORKDIR /app
 
-# Копируем файлы зависимостей из корня проекта
+# Копіюємо файли залежностей із кореня проєкту
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev
 
-# Копируем содержимое папки worker внутрь контейнера
-COPY worker/ ./
+# Копіюємо весь репозиторій для доступу до worker/, models/ та data/.
+COPY . .
 
-CMD ["uv", "run", "main.py"]
+CMD ["uv", "run", "python", "worker/yolo_final.py"]

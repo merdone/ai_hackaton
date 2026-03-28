@@ -1,68 +1,162 @@
-# 🚀 AI Warehouse Analytics (Hackathon Project)
+# AI Warehouse Analytics
 
-Проект для хакатона: система трекинга и аналитики действий рабочих на складе с использованием YOLOv8, ByteTrack и Streamlit. 
+Система для аналізу операцій працівників складу з розділенням на два незалежні контури:
+- **Training Tool (Streamlit + ML)**: розмітка дій, підготовка датасету, навчання `RandomForest`.
+- **Live Analysis Tool (Streamlit + SQLite + RF)**: live-візуалізація, інференс, події та observability.
 
-Архитектура разделена на 2 независимых модуля:
-1. **Worker (CV + ML):** Фоновый процесс, который обрабатывает видео, делает инференс и пишет события в SQLite базу.
-2. **UI (Streamlit):** Интерфейс для разметки данных, обучения модели и отображения live-аналитики из базы.
+## Актуальний workflow (ваш сценарій)
 
----
+1. Запустити `worker/yolo_final.py` на відео, щоб отримати `preview_with_ids.mp4` і `features_temp.json`.
+2. Запустити `worker/zone_annotator.py`, щоб створити/оновити `zones.json`.
+3. Запустити `app/main.py` для розмітки дій та навчання `RandomForest`.
+4. Запустити `app/live_analysis.py` для live-аналізу.
 
-## 🛠 Как начать кодить (Локальная разработка)
+Це підтримується поточною конфігурацією: **у Docker запускаються тільки UI-сервіси**, а CV-підготовка виконується локально як dev-скрипти.
 
-Мы используем `uv` — сверхбыстрый менеджер пакетов. Он сам создаст виртуальное окружение (`.venv`) и подтянет все зависимости.
+## Архітектура
 
-### 1. Подготовка
-Убедись, что у тебя установлен Python (>=3.10) и `uv`.
-Если `uv` нет, ставь через консоль:
-* Windows: `powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"`
-* macOS/Linux: `curl -LsSf https://astral.sh/uv/install.sh | sh`
+```text
+(Local dev) worker/yolo_final.py + worker/zone_annotator.py
+                |
+                v
+  data/output/preview_with_ids.mp4, features_temp.json, zones.json
+                |
+                v
+       app/main.py (розмітка + train RF -> models/rf_v1.pkl)
+                |
+                v
+        app/live_analysis.py (live inference + events.db + dashboard)
+```
 
-### 2. Установка проекта
-Склонируй репозиторий и подтяни зависимости:
+Ключовий принцип: **важкий CV/ML ізольований від UI**.
+
+## Структура проєкту
+
+```text
+app/         Streamlit застосунки (навчання + live-аналітика)
+worker/      CV-скрипти підготовки (YOLO, зони)
+models/      Ваги YOLO і збережені ML-моделі
+data/        SQLite, preview, features, проміжні артефакти
+experiments/ Допоміжні скрипти для досліджень
+```
+
+## Передумови
+
+- Python `>=3.10, <3.13`
+- `uv`
+- Docker Desktop
+- (Опційно) GPU/CUDA
+
+## Швидкий старт
+
+### 1) Підготовка артефактів локально (без Docker)
+
 ```bash
-git clone <ССЫЛКА_НА_ТВОЙ_РЕПОЗИТОРИЙ>
-cd ai_hackaton
 uv sync
+uv run python worker/yolo_final.py
+uv run python worker/zone_annotator.py
 ```
-Эта команда за секунду установит все нужные библиотеки (Streamlit, Pandas и т.д.) и создаст папку .venv.
-### 3. Локальный запуск (Пишем и дебажим код тут)
 
-Так как сервисы независимы, ты можешь запускать их отдельно прямо из PyCharm или терминала:
+### 2) Запуск UI через Docker
 
-Запустить интерфейс (UI):
-```Bash
-    uv run streamlit run app/main.py
-```
-(Откроется в браузере по адресу http://localhost:8501)
-
-Запустить фоновый процесс (Worker):
-```Bash
-uv run python worker/main.py
-```
-(Начнет генерировать данные в файл data/events.db )
-
-🐳 Полный запуск через Docker (Финальный тест)
-
-Используем Докер, чтобы проверить, как вся система работает вместе (база данных, воркер и UI), или для финальной презентации.
-
-Убедись, что запущен Docker Desktop, и введи в корне проекта:
-
-```Bash
+```bash
 docker-compose up --build
 ```
 
-После сборки интерфейс будет доступен по адресу http://localhost:8501.
+Після запуску:
+- Training UI: `http://localhost:8501`
+- Live UI: `http://localhost:8502`
 
-База данных events.db будет автоматически расшарена между контейнерами в папке data/.
+Зупинка:
 
-Чтобы остановить контейнеры, нажми Ctrl+C в терминале и пропиши docker-compose down.
+```bash
+docker-compose down
+```
 
-📁 Структура проекта
-    /app — Код интерфейса на Streamlit.
+## Локальний запуск без Docker (повна інструкція)
 
-    /worker — Код фонового процесса (CV/ML).
+1) Встановіть залежності:
 
-    /data — Общая папка для SQLite базы (events.db).
+```bash
+uv sync
+```
 
-    /models — Папка для сохранения обученных моделей (rf_v1.pkl).
+2) Підготуйте артефакти для навчання (preview/features/zones):
+
+```bash
+uv run python worker/yolo_final.py
+uv run python worker/zone_annotator.py
+```
+
+3) Запустіть **Training UI** (термінал №1):
+
+```bash
+uv run streamlit run app/main.py
+```
+
+4) Запустіть **Live Analysis UI** (термінал №2):
+
+```bash
+uv run streamlit run app/live_analysis.py --server.port 8502
+```
+
+5) Відкрийте інтерфейси у браузері:
+- Training UI: `http://localhost:8501`
+- Live UI: `http://localhost:8502`
+
+> Якщо хочете, можна запускати тільки один із сервісів (лише training або лише live) відповідною командою вище.
+
+## Локальний запуск UI (альтернатива Docker)
+
+```bash
+uv run streamlit run app/main.py
+uv run streamlit run app/live_analysis.py --server.port 8502
+```
+
+## Що реалізовано
+
+### 4.1 Інструмент навчання
+- Перегляд preview-відео після CV-препроцесингу.
+- Розмітка дій по `track_id` і часовому інтервалу.
+- Формування датасету (`data/labeled_dataset.csv`).
+- Навчання `RandomForestClassifier` і збереження моделі (`models/rf_v1.pkl`).
+
+### 4.2 Інструмент live-аналізу
+- Обробка відеопотоку/файлу в інтерфейсі live-аналізу.
+- Класифікація дій через `rf_v1.pkl` (якщо модель доступна).
+- Запис цифрових подій в SQLite (`data/events.db`).
+- Observability (таблиці/графіки), безпечне очищення БД.
+
+## Конфігурація через `.env`
+
+### App
+- `APP_FEATURES_FILE`
+- `APP_DATASET_FILE`
+- `APP_MODEL_FILE`
+- `APP_PREVIEW_VIDEO_PATH`
+- `APP_ORIGINAL_VIDEO_PATH`
+- `APP_DB_PATH`
+
+### Worker
+- `WORKER_YOLO_MODEL_PATH`
+- `WORKER_YOLO_VIDEO_PATH`
+- `WORKER_YOLO_ZONES_PATH`
+- `WORKER_YOLO_TRACKER`
+- `WORKER_YOLO_CONF`
+- `WORKER_YOLO_DEVICE`
+- `WORKER_YOLO_DRAW_ZONES`
+
+> Повний перелік: `app/settings.py`, `worker/settings.py`.
+
+## Troubleshooting
+- **Розсинхрон часу відео і шкали**: `features_temp.json` і `preview_with_ids.mp4` мають бути з одного запуску `yolo_final.py`.
+- **RF не підхопився в live**: перевір `APP_MODEL_FILE` та файл `models/rf_v1.pkl`.
+- **Немає подій у live-дашборді**: перевір шлях `APP_DB_PATH` і доступність `data/events.db`.
+
+## Технології
+- Streamlit
+- Ultralytics YOLO + ByteTrack
+- scikit-learn (`RandomForestClassifier`)
+- SQLite
+- Docker / Docker Compose
+- uv
