@@ -19,7 +19,7 @@ class AppSettings:
     preview_video_path: Path
     original_video_path: Path
     database_path: Path
-    actions: tuple[str, ...] = ("Idle", "Moving", "Sorting")
+    actions: tuple[str, ...] = ("Idle", "Moving", "Unloading", "Sorting")
     train_features: tuple[str, ...] = (
         "speed_relative",
         "speed_relative_change",

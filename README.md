@@ -135,24 +135,38 @@ uv run streamlit run app/live_analysis.py --server.port 8502
 
 ## Конфігурація через `.env`
 
-### App
-- `APP_FEATURES_FILE`
-- `APP_DATASET_FILE`
-- `APP_MODEL_FILE`
-- `APP_PREVIEW_VIDEO_PATH`
-- `APP_ORIGINAL_VIDEO_PATH`
-- `APP_DB_PATH`
+Нижче пояснення для **кожного поля** з поточного `.env`.
 
-### Worker
-- `WORKER_YOLO_MODEL_PATH`
-- `WORKER_YOLO_VIDEO_PATH`
-- `WORKER_YOLO_ZONES_PATH`
-- `WORKER_YOLO_TRACKER`
-- `WORKER_YOLO_CONF`
-- `WORKER_YOLO_DEVICE` (`cpu`, `auto`, `cuda`, `cuda:0`, `gpu`)
-- `WORKER_YOLO_DRAW_ZONES`
+### App (Training UI + Live UI)
+- `APP_FEATURES_FILE` - шлях до JSON з фічами після `worker/yolo_final.py` (джерело для розмітки в `app/main.py`).
+- `APP_DATASET_FILE` - шлях до CSV датасету розмітки для навчання `RandomForest`.
+- `APP_MODEL_FILE` - шлях збереження/завантаження RF-моделі (`.pkl`).
+- `APP_PREVIEW_VIDEO_PATH` - шлях до preview-відео з ID (`preview_with_ids.mp4`) для UI розмітки.
+- `APP_ORIGINAL_VIDEO_PATH` - шлях до оригінального відео; використовується як fallback для таймлайна, якщо preview недоступне.
+- `APP_DB_PATH` - SQLite БД для live-подій та аналітики (`events.db`).
 
-> Повний перелік: `app/settings.py`, `worker/settings.py`.
+### Worker (YOLO + трекінг + фічі)
+- `YOLO_MODEL_PATH` - шлях до ваг YOLO (`best.pt` або інший чекпойнт).
+- `YOLO_VIDEO_PATH` - відеоджерело для обробки (`.mp4/.mkv` або інший сумісний файл).
+- `YOLO_PREVIEW_SAVE_PATH` - куди зберігати відео-прев'ю з боксами/ID.
+- `YOLO_ZONES_SAVE_PATH` - шлях до JSON зон, який створює `worker/zone_annotator.py`.
+- `YOLO_FEATURES_SAVE_PATH` - куди зберігати обчислені фічі (`features_temp.json`).
+- `YOLO_TRACKER` - конфіг трекера для YOLO (`bytetrack.yaml` тощо).
+- `YOLO_CLASSES` - список класів через кому (наприклад `0`), які потрібно детектити.
+- `YOLO_IMGSZ` - розмір вхідного кадру для YOLO (наприклад `640`).
+- `YOLO_CONF` - мінімальний confidence детекції (0..1).
+- `YOLO_DEVICE` - пристрій інференсу: `auto`, `cpu`, `cuda`, `cuda:0`.
+- `YOLO_PREVIEW_WIDTH` - ширина output preview-відео в пікселях.
+- `YOLO_PREVIEW_HEIGHT` - висота output preview-відео в пікселях.
+- `YOLO_WINDOW_NAME` - назва OpenCV-вікна для `yolo_final.py` (коли ввімкнений показ вікна).
+- `ZONE_ANNOTATOR_WINDOW_NAME` - назва OpenCV-вікна для `zone_annotator.py`.
+- `YOLO_DRAW_ZONES` - чи малювати зони на кадрах (`true/false`, `1/0`, `yes/no`).
+- `YOLO_SHOW_WINDOW` - чи показувати live OpenCV-вікно під час обробки (`true/false`).
+- `YOLO_FOURCC` - fourcc код відеокодека для запису preview (наприклад `avc1`).
+
+### Legacy aliases (тимчасова сумісність)
+- Підтримуються старі `WORKER_*` ключі (`WORKER_YOLO_*`, `WORKER_ZONE_ANNOTATOR_WINDOW_NAME`) як fallback.
+- Рекомендується використовувати тільки нові `YOLO_*` / `ZONE_ANNOTATOR_WINDOW_NAME`.
 
 ## Troubleshooting
 - **Розсинхрон часу відео і шкали**: `features_temp.json` і `preview_with_ids.mp4` мають бути з одного запуску `yolo_final.py`.

@@ -10,6 +10,24 @@ from sklearn.ensemble import RandomForestClassifier
 from settings import AppSettings, get_app_settings
 
 
+# Keep only true legacy aliases here; Sorting is now a standalone class.
+ACTION_ALIASES = {}
+
+
+def normalize_action_value(value: object) -> str:
+    action = str(value).strip()
+    return ACTION_ALIASES.get(action, action)
+
+
+def normalize_action_column(df: pd.DataFrame) -> pd.DataFrame:
+    if "action" not in df.columns:
+        return df
+
+    normalized = df.copy()
+    normalized["action"] = normalized["action"].map(normalize_action_value)
+    return normalized
+
+
 def get_video_fps(video_path: Path) -> float:
     cap = cv2.VideoCapture(str(video_path))
     fps = cap.get(cv2.CAP_PROP_FPS)
@@ -78,11 +96,14 @@ def select_frame_range(
 
 
 def append_to_dataset(dataset_file: Path, df_selected: pd.DataFrame) -> None:
+    normalized_selected = normalize_action_column(df_selected)
+
     if dataset_file.exists():
         df_existing = pd.read_csv(dataset_file)
-        df_combined = pd.concat([df_existing, df_selected], ignore_index=True)
+        df_existing = normalize_action_column(df_existing)
+        df_combined = pd.concat([df_existing, normalized_selected], ignore_index=True)
     else:
-        df_combined = df_selected
+        df_combined = normalized_selected
 
     dataset_file.parent.mkdir(parents=True, exist_ok=True)
     df_combined.to_csv(dataset_file, index=False)
@@ -102,6 +123,7 @@ def run_training(settings: AppSettings) -> None:
         return
 
     df_dataset = pd.read_csv(settings.dataset_file)
+    df_dataset = normalize_action_column(df_dataset)
 
     required_features = list(settings.train_features)
     missing_features = [col for col in required_features if col not in df_dataset.columns]

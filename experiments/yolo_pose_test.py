@@ -53,9 +53,9 @@ while cap.isOpened():
                 # Якщо нога змістилася більш ніж на 5 пікселів -> Йде
                 if delta_ankle_x > 5:
                     action = "Moving"
-                # Якщо нога стоїть (<2px), а рука рухається вгору-вниз (>5px) -> Сортує
+                # Якщо нога стоїть (<2px), а рука рухається вгору-вниз (>5px) -> Вивантажує
                 elif delta_wrist_y > 5 and delta_ankle_x < 2:
-                    action = "Sorting"
+                    action = "Unloading"
 
                 # Пишемо статус прямо над головою людини
                 x1, y1 = int(bboxes[i][0]), int(bboxes[i][1])

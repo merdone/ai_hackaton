@@ -26,6 +26,15 @@ from worker.yolo_final import (
 )
 
 
+# Keep only true legacy aliases here; Sorting is now a standalone class.
+ACTION_ALIASES = {}
+
+
+def normalize_action_value(value: object) -> str:
+    action = str(value).strip()
+    return ACTION_ALIASES.get(action, action)
+
+
 class ActiveEventState(TypedDict):
     start_time: datetime
     confidences: list[float]
@@ -53,7 +62,7 @@ def predict_action(
     feature_row = {name: float(features.get(name, 0.0)) for name in train_features}
     X = pd.DataFrame([feature_row], columns=list(train_features))
 
-    predicted_label = str(model.predict(X)[0])
+    predicted_label = normalize_action_value(model.predict(X)[0])
     confidence = fallback_confidence
     if hasattr(model, "predict_proba"):
         confidence = float(model.predict_proba(X).max())
@@ -223,6 +232,8 @@ def show_observability_dashboard():
         analytics = db.get_zone_analytics()
         if analytics:
             df_analytics = pd.DataFrame(analytics)
+            if "task_classification" in df_analytics.columns:
+                df_analytics["task_classification"] = df_analytics["task_classification"].map(normalize_action_value)
             col1, col2 = st.columns(2)
             with col1:
                 st.write("**Загальна статистика (Zone Analytics)**")
@@ -240,6 +251,8 @@ def show_observability_dashboard():
 
         if recent_events:
             df_events = pd.DataFrame(recent_events)
+            if "task_classification" in df_events.columns:
+                df_events["task_classification"] = df_events["task_classification"].map(normalize_action_value)
             # Розгортаємо таблицю на всю висоту, щоб прибрати внутрішній скрол.
             st.dataframe(df_events, width='stretch', height=600)
         else:
