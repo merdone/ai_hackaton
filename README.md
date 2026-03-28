@@ -135,36 +135,118 @@ uv run streamlit run app/live_analysis.py --server.port 8502
 
 ## Конфігурація через `.env`
 
-Нижче пояснення для **кожного поля** з поточного `.env`.
+Нижче змінні згруповані за модулем, який їх реально використовує.
 
-### App (Training UI + Live UI)
-- `APP_FEATURES_FILE` - шлях до JSON з фічами після `video_pipeline/yolo_final.py` (джерело для розмітки в `app/main.py`).
-- `APP_DATASET_FILE` - шлях до CSV датасету розмітки для навчання `RandomForest`.
-- `APP_MODEL_FILE` - шлях збереження/завантаження RF-моделі (`.pkl`).
-- `APP_PREVIEW_VIDEO_PATH` - шлях до preview-відео з ID (`preview_with_ids.mp4`) для UI розмітки.
-- `APP_ORIGINAL_VIDEO_PATH` - шлях до оригінального відео; використовується як fallback для таймлайна, якщо preview недоступне.
-- `APP_DB_PATH` - SQLite БД для live-подій та аналітики (`events.db`).
+### Модуль `app/main.py` (Training UI)
+- `APP_FEATURES_FILE` - JSON з фічами після `video_pipeline/yolo_final.py`.
+- `APP_DATASET_FILE` - CSV для розмітки та навчання `RandomForest`.
+- `APP_MODEL_FILE` - куди зберігати натреновану RF-модель (`.pkl`).
+- `APP_PREVIEW_VIDEO_PATH` - preview-відео для інтерфейсу розмітки.
+- `APP_ORIGINAL_VIDEO_PATH` - fallback-відео для таймлайна (якщо preview недоступне).
 
-### Worker (YOLO + трекінг + фічі)
-- `YOLO_MODEL_PATH` - шлях до ваг YOLO (`best.pt` або інший чекпойнт).
-- `YOLO_VIDEO_PATH` - відеоджерело для етапу підготовки (`video_pipeline/yolo_final.py`).
-- `LIVE_ANALYSIS_VIDEO_PATH` - відеоджерело саме для `app/live_analysis.py`.
-- `LIVE_ANALYSIS_ZONES_PATH` - файл зон саме для `app/live_analysis.py`.
-- `YOLO_PREVIEW_SAVE_PATH` - куди зберігати відео-прев'ю з боксами/ID.
-- `YOLO_ZONES_SAVE_PATH` - шлях до JSON зон, який створює `video_pipeline/zone_annotator.py`.
-- `YOLO_FEATURES_SAVE_PATH` - куди зберігати обчислені фічі (`features_temp.json`).
-- `YOLO_TRACKER` - конфіг трекера для YOLO (`bytetrack.yaml` тощо).
-- `YOLO_CLASSES` - список класів через кому (наприклад `0`), які потрібно детектити.
-- `YOLO_IMGSZ` - розмір вхідного кадру для YOLO (наприклад `640`).
+### Модуль `app/live_analysis.py` (Live UI)
+- `APP_DB_PATH` - SQLite БД для подій та дашбордів (`events.db`).
+- `LIVE_ANALYSIS_VIDEO_PATH` - джерело відео саме для live-аналізу.
+- `LIVE_ANALYSIS_ZONES_PATH` - JSON файл зон саме для live-аналізу.
+
+### Модуль `video_pipeline/yolo_final.py` (підготовка фіч)
+- `YOLO_MODEL_PATH` - шлях до ваг YOLO.
+- `YOLO_VIDEO_PATH` - відеоджерело для етапу підготовки (offline preprocessing).
+- `YOLO_PREVIEW_SAVE_PATH` - куди зберігати preview-відео з боксами/ID.
+- `YOLO_FEATURES_SAVE_PATH` - куди зберігати розраховані фічі (`features_temp*.json`).
+- `YOLO_ZONES_SAVE_PATH` - JSON зон, що застосовується під час preprocessing.
+- `YOLO_TRACKER` - конфіг трекера (`bytetrack.yaml` тощо).
+- `YOLO_CLASSES` - класи детекції через кому (наприклад `0`).
+- `YOLO_IMGSZ` - розмір вхідного кадру для YOLO.
 - `YOLO_CONF` - мінімальний confidence детекції (0..1).
 - `YOLO_DEVICE` - пристрій інференсу: `auto`, `cpu`, `cuda`, `cuda:0`.
-- `YOLO_PREVIEW_WIDTH` - ширина output preview-відео в пікселях.
-- `YOLO_PREVIEW_HEIGHT` - висота output preview-відео в пікселях.
-- `YOLO_WINDOW_NAME` - назва OpenCV-вікна для `yolo_final.py` (коли ввімкнений показ вікна).
-- `ZONE_ANNOTATOR_WINDOW_NAME` - назва OpenCV-вікна для `zone_annotator.py`.
+- `YOLO_PREVIEW_WIDTH` - ширина output preview-відео.
+- `YOLO_PREVIEW_HEIGHT` - висота output preview-відео.
 - `YOLO_DRAW_ZONES` - чи малювати зони на кадрах (`true/false`, `1/0`, `yes/no`).
-- `YOLO_SHOW_WINDOW` - чи показувати live OpenCV-вікно під час обробки (`true/false`).
-- `YOLO_FOURCC` - fourcc код відеокодека для запису preview (наприклад `avc1`).
+- `YOLO_SHOW_WINDOW` - чи показувати OpenCV-вікно під час обробки.
+- `YOLO_FOURCC` - fourcc код для запису preview (наприклад `avc1`).
+
+### Модуль `video_pipeline/zone_annotator.py` (розмітка зон)
+- `ZONE_ANNOTATOR_WINDOW_NAME` - назва OpenCV-вікна розмітника зон.
+
+## Usage Case: від відео до навчання і live-аналізу
+
+Нижче один наскрізний сценарій, який можна повторити крок за кроком.
+
+1. **Підготувати артефакти з відео (ID + фічі)**
+   - Перевірити `YOLO_VIDEO_PATH`, `YOLO_MODEL_PATH`, `YOLO_FEATURES_SAVE_PATH`, `YOLO_PREVIEW_SAVE_PATH` у `.env`.
+   - Запустити preprocessing:
+
+```bash
+uv run python video_pipeline/yolo_final.py
+```
+
+2. **Підготувати/оновити зони**
+   - Перевірити `YOLO_ZONES_SAVE_PATH` (або окремо `LIVE_ANALYSIS_ZONES_PATH` для live).
+   - Запустити розмітник зон:
+
+```bash
+uv run python video_pipeline/zone_annotator.py
+```
+
+3. **Розмітити дані і навчити модель**
+   - Запустити Training UI:
+
+```bash
+uv run streamlit run app/main.py
+```
+
+   - У UI: вибрати `track_id` + інтервал + дію -> додати в датасет -> натиснути "Навчити модель".
+   - Результат: модель зберігається у `APP_MODEL_FILE` (типово `models/rf_v1.pkl`).
+
+4. **Запустити live-аналіз із натренованою моделлю**
+   - Перевірити `LIVE_ANALYSIS_VIDEO_PATH`, `LIVE_ANALYSIS_ZONES_PATH`, `APP_DB_PATH`, `APP_MODEL_FILE`.
+   - Запустити Live UI:
+
+```bash
+uv run streamlit run app/live_analysis.py --server.port 8502
+```
+
+   - У UI: обрати джерело відео/файл зон -> стартувати live -> переглядати події й метрики.
+
+## Usage Case 2: Docker-сценарій (CPU/GPU)
+
+Цей кейс зручний, коли UI треба запускати ізольовано в контейнерах.
+
+1. **Підготувати артефакти локально (поза Docker)**
+   - Налаштувати `.env` для preprocessing (`YOLO_VIDEO_PATH`, `YOLO_FEATURES_SAVE_PATH`, `YOLO_PREVIEW_SAVE_PATH`, `YOLO_ZONES_SAVE_PATH`).
+   - Запустити підготовку:
+
+```bash
+uv sync
+uv run python video_pipeline/yolo_final.py
+uv run python video_pipeline/zone_annotator.py
+```
+
+2. **Запустити UI-контейнери у CPU-режимі**
+
+```powershell
+docker-compose up --build
+```
+
+   - Training UI: `http://localhost:8501`
+   - Live UI: `http://localhost:8502`
+
+3. **(Опційно) Запустити UI-контейнери у GPU-режимі**
+
+```powershell
+docker-compose -f docker-compose.yml -f docker-compose.gpu.yml up --build
+```
+
+4. **Потік роботи в UI**
+   - У Training UI: виконати розмітку і навчити модель (збереження у `APP_MODEL_FILE`).
+   - У Live UI: вибрати джерело відео/зони, стартувати live, переглядати події й аналітику з `APP_DB_PATH`.
+
+5. **Завершення роботи**
+
+```powershell
+docker-compose down
+```
 
 ## Troubleshooting
 - **Розсинхрон часу відео і шкали**: `features_temp.json` і `preview_with_ids.mp4` мають бути з одного запуску `yolo_final.py`.
