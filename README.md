@@ -57,10 +57,16 @@ uv run python worker/yolo_final.py
 uv run python worker/zone_annotator.py
 ```
 
-### 2) Запуск UI через Docker
+### 2) Запуск UI через Docker (CPU режим за замовчуванням)
 
-```bash
+```powershell
 docker-compose up --build
+```
+
+### 3) Запуск UI через Docker з CUDA (якщо GPU доступна)
+
+```powershell
+docker-compose -f docker-compose.yml -f docker-compose.gpu.yml up --build
 ```
 
 Після запуску:
@@ -69,7 +75,7 @@ docker-compose up --build
 
 Зупинка:
 
-```bash
+```powershell
 docker-compose down
 ```
 
@@ -143,7 +149,7 @@ uv run streamlit run app/live_analysis.py --server.port 8502
 - `WORKER_YOLO_ZONES_PATH`
 - `WORKER_YOLO_TRACKER`
 - `WORKER_YOLO_CONF`
-- `WORKER_YOLO_DEVICE`
+- `WORKER_YOLO_DEVICE` (`cpu`, `auto`, `cuda`, `cuda:0`, `gpu`)
 - `WORKER_YOLO_DRAW_ZONES`
 
 > Повний перелік: `app/settings.py`, `worker/settings.py`.
@@ -152,11 +158,9 @@ uv run streamlit run app/live_analysis.py --server.port 8502
 - **Розсинхрон часу відео і шкали**: `features_temp.json` і `preview_with_ids.mp4` мають бути з одного запуску `yolo_final.py`.
 - **RF не підхопився в live**: перевір `APP_MODEL_FILE` та файл `models/rf_v1.pkl`.
 - **Немає подій у live-дашборді**: перевір шлях `APP_DB_PATH` і доступність `data/events.db`.
-
-## Технології
-- Streamlit
-- Ultralytics YOLO + ByteTrack
-- scikit-learn (`RandomForestClassifier`)
-- SQLite
-- Docker / Docker Compose
-- uv
+- **`Found no NVIDIA driver` у Docker**:
+  1. Переконайтесь, що встановлено актуальний NVIDIA driver у Windows.
+  2. У Docker Desktop увімкнений WSL2 backend.
+  3. Запускайте GPU-режим через `docker-compose.gpu.yml`.
+  4. Перевірте в контейнері: `uv run python -c "import torch; print(torch.cuda.is_available())"`.
+- **Повільно працює в Docker**: базовий `docker-compose.yml` запускає CPU-режим. Для GPU використовуйте команду з `-f docker-compose.gpu.yml`.

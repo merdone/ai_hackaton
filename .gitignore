@@ -9,4 +9,4 @@ data/
 *.mp4
 *.mkv
 *.db
-data/events.db
+events.db

@@ -1,0 +1,11 @@
+services:
+  training_ui:
+    environment:
+      WORKER_YOLO_DEVICE: auto
+    gpus: all
+
+  live_ui:
+    environment:
+      WORKER_YOLO_DEVICE: auto
+    gpus: all
+

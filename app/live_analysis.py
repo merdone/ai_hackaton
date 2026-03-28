@@ -22,6 +22,7 @@ from worker.yolo_final import (
     draw_zone_highlight,
     draw_zones,
     load_zones_payload,
+    resolve_yolo_device,
 )
 
 
@@ -76,10 +77,10 @@ def draw_action_label(frame, cx: float, cy: float, w: float, h: float, action: s
     )
 
 
-def process_live_stream(video_placeholder, worker_settings, app_settings: AppSettings, rf_model: Any):
+def process_live_stream(video_placeholder, worker_settings, app_settings: AppSettings, rf_model: Any, effective_device: str):
     """Live-потік із тією ж CV-логікою, що і в yolo_final (зони + нормалізовані фічі)."""
     yolo_model = YOLO(worker_settings.yolo_model_path)
-    yolo_model.to(worker_settings.yolo_device)
+    yolo_model.to(effective_device)
 
     cap = cv2.VideoCapture(worker_settings.yolo_video_path)
     if not cap.isOpened():
@@ -277,6 +278,7 @@ def main():
 
     worker_settings = get_settings()
     app_settings = get_app_settings()
+    effective_device = resolve_yolo_device(worker_settings.yolo_device)
 
     if not Path(worker_settings.yolo_model_path).exists():
         st.error(f"YOLO модель не знайдена: {worker_settings.yolo_model_path}")
@@ -299,6 +301,10 @@ def main():
     with col_controls:
         st.header("Керування")
         st.write(f"**Джерело:** `{worker_settings.yolo_video_path}`")
+        device_badge = "🟢 GPU (CUDA)" if effective_device.startswith("cuda") else "🟠 CPU"
+        st.write(f"**Рендер/інференс:** {device_badge}")
+        if effective_device != worker_settings.yolo_device:
+            st.caption(f"Запитаний пристрій: `{worker_settings.yolo_device}` -> фактичний: `{effective_device}`")
         if rf_model is not None:
             st.write("**ML класифікація:** RandomForest увімкнено 🟢")
         else:
@@ -326,7 +332,7 @@ def main():
         video_placeholder = st.empty()
 
         if st.session_state.is_running:
-            process_live_stream(video_placeholder, worker_settings, app_settings, rf_model)
+            process_live_stream(video_placeholder, worker_settings, app_settings, rf_model, effective_device)
         else:
             video_placeholder.info("Натисніть 'Почати live-аналіз' для запуску відеопотоку.")
 

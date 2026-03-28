@@ -5,6 +5,7 @@ from typing import TypedDict
 
 import cv2
 import numpy as np
+import torch
 from ultralytics import YOLO
 
 try:
@@ -16,6 +17,18 @@ except ImportError:
 class RenderZone(TypedDict):
     name: str
     polygon: np.ndarray
+
+
+def resolve_yolo_device(requested_device: str) -> str:
+    normalized = (requested_device or "auto").strip().lower()
+    if normalized == "gpu":
+        normalized = "cuda"
+
+    if normalized == "auto":
+        return "cuda" if torch.cuda.is_available() else "cpu"
+    if normalized.startswith("cuda") and not torch.cuda.is_available():
+        return "cpu"
+    return normalized or "cpu"
 
 
 def create_video_writer(cap: cv2.VideoCapture, settings: WorkerSettings) -> tuple[cv2.VideoWriter, int]:
@@ -139,7 +152,8 @@ def draw_zone_highlight(frame: np.ndarray, cx: float, cy: float, w: float, h: fl
 
 def extract_features(settings: WorkerSettings) -> list[dict[str, float | int | str]]:
     model = YOLO(settings.yolo_model_path)
-    model.to(settings.yolo_device)
+    device = resolve_yolo_device(settings.yolo_device)
+    model.to(device)
 
     cap = cv2.VideoCapture(settings.yolo_video_path)
     if not cap.isOpened():

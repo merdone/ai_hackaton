@@ -91,7 +91,7 @@ def get_settings() -> WorkerSettings:
         yolo_classes=(0,),
         yolo_img_size=640,
         yolo_confidence=0.2,
-        yolo_device="cuda",
+        yolo_device="auto",
         yolo_preview_width=1280,
         yolo_preview_height=720,
         yolo_window_name="Features Extractor",

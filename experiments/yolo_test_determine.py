@@ -4,7 +4,7 @@ from ultralytics import YOLO
 
 # Робоча версія: біжить/йде/стоїть
 
-model = YOLO('../models/yolov8m.pt')
+model = YOLO('../models/yolov8l.pt')
 model.to('cuda')
 
 cap = cv2.VideoCapture('../data/run.mp4')

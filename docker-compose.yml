@@ -4,6 +4,9 @@ services:
       context: .
       dockerfile: app/Dockerfile
     command: ["uv", "run", "streamlit", "run", "app/main.py", "--server.port=8501", "--server.address=0.0.0.0"]
+    environment:
+      YOLO_CONFIG_DIR: /tmp/Ultralytics
+      WORKER_YOLO_DEVICE: cpu
     ports:
       - "8501:8501"
     volumes:
@@ -15,6 +18,9 @@ services:
       context: .
       dockerfile: app/Dockerfile
     command: ["uv", "run", "streamlit", "run", "app/live_analysis.py", "--server.port=8502", "--server.address=0.0.0.0"]
+    environment:
+      YOLO_CONFIG_DIR: /tmp/Ultralytics
+      WORKER_YOLO_DEVICE: cpu
     ports:
       - "8502:8502"
     volumes:
