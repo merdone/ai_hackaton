@@ -86,8 +86,16 @@ def draw_action_label(frame, cx: float, cy: float, w: float, h: float, action: s
     )
 
 
-def process_live_stream(video_placeholder, worker_settings, app_settings: AppSettings, rf_model: Any, effective_device: str):
-    """Live-потік із тією ж CV-логікою, що і в yolo_final (зони + нормалізовані фічі)."""
+def process_live_stream(
+    video_placeholder,
+    worker_settings,
+    app_settings: AppSettings,
+    rf_model: Any,
+    effective_device: str,
+    yolo_confidence: float,
+    rf_confidence_min: float,
+):
+    """Live-потік із CV-логікою, налаштованою прямо з UI (YOLO/RF confidence)."""
     yolo_model = YOLO(worker_settings.yolo_model_path)
     yolo_model.to(effective_device)
 
@@ -115,7 +123,7 @@ def process_live_stream(video_placeholder, worker_settings, app_settings: AppSet
                 tracker=worker_settings.yolo_tracker,
                 classes=list(worker_settings.yolo_classes),
                 imgsz=worker_settings.yolo_img_size,
-                conf=worker_settings.yolo_confidence,
+                conf=yolo_confidence,
                 verbose=False,
             )
             annotated_frame = results[0].plot()
@@ -198,18 +206,22 @@ def process_live_stream(video_placeholder, worker_settings, app_settings: AppSet
                                 fallback_confidence=float(avg_conf),
                             )
 
-                            metadata = dict(state["features"])
-                            metadata["detector_avg_confidence"] = round(float(avg_conf), 4)
+                            if float(predicted_conf) >= rf_confidence_min:
+                                metadata = dict(state["features"])
+                                metadata["detector_avg_confidence"] = round(float(avg_conf), 4)
+                                metadata["ui_yolo_confidence"] = round(float(yolo_confidence), 3)
+                                metadata["ui_rf_confidence_min"] = round(float(rf_confidence_min), 3)
 
-                            db.log_event(
-                                worker_id=f"Worker_{track_id}",
-                                classification=predicted_class,
-                                zone=state["zone"],
-                                start_time=state["start_time"],
-                                end_time=now,
-                                confidence=float(predicted_conf),
-                                metadata=metadata,
-                            )
+                                db.log_event(
+                                    worker_id=f"Worker_{track_id}",
+                                    classification=predicted_class,
+                                    zone=state["zone"],
+                                    start_time=state["start_time"],
+                                    end_time=now,
+                                    confidence=float(predicted_conf),
+                                    metadata=metadata,
+                                )
+
                             active_events[track_id] = {
                                 "start_time": now,
                                 "confidences": [conf],
@@ -224,8 +236,17 @@ def process_live_stream(video_placeholder, worker_settings, app_settings: AppSet
         cap.release()
 
 
+def _safe_primary(values: pd.Series) -> str:
+    if values.empty:
+        return "-"
+    mode = values.mode(dropna=True)
+    if mode.empty:
+        return "-"
+    return str(mode.iloc[0])
+
+
 def show_observability_dashboard():
-    """Відображає таблицю та аналітику з бази даних."""
+    """Відображає таблицю подій та розширену аналітику по зонах і працівниках."""
     st.subheader("📊 Observability Dashboard")
 
     try:
@@ -245,6 +266,63 @@ def show_observability_dashboard():
 
         st.divider()
 
+        stats_query = (
+            "SELECT worker_id, zone, task_classification, duration, confidence_score, timestamp_start "
+            "FROM operations_log"
+        )
+        stats_rows = db.execute_query(stats_query)
+
+        if stats_rows:
+            df_stats = pd.DataFrame(stats_rows)
+            df_stats["task_classification"] = df_stats["task_classification"].map(normalize_action_value)
+            df_stats["duration"] = pd.to_numeric(df_stats["duration"], errors="coerce").fillna(0.0)
+            df_stats["confidence_score"] = pd.to_numeric(df_stats["confidence_score"], errors="coerce").fillna(0.0)
+            df_stats["zone"] = df_stats["zone"].fillna("None").astype(str)
+            df_stats["worker_id"] = df_stats["worker_id"].fillna("Unknown").astype(str)
+
+            st.write("**Статистика по зонах**")
+            zone_stats = (
+                df_stats.groupby("zone", as_index=False)
+                .agg(
+                    events=("worker_id", "count"),
+                    workers=("worker_id", "nunique"),
+                    total_duration_sec=("duration", "sum"),
+                    avg_confidence=("confidence_score", "mean"),
+                )
+                .sort_values("events", ascending=False)
+            )
+            zone_stats["total_duration_min"] = (zone_stats["total_duration_sec"] / 60.0).round(2)
+            zone_stats["avg_confidence"] = zone_stats["avg_confidence"].round(3)
+            st.dataframe(
+                zone_stats[["zone", "events", "workers", "total_duration_min", "avg_confidence"]],
+                width="stretch",
+            )
+
+            st.write("**Статистика по ID працівників**")
+            worker_stats = (
+                df_stats.groupby("worker_id", as_index=False)
+                .agg(
+                    events=("zone", "count"),
+                    zones_covered=("zone", "nunique"),
+                    total_duration_sec=("duration", "sum"),
+                    avg_confidence=("confidence_score", "mean"),
+                    dominant_zone=("zone", _safe_primary),
+                )
+                .sort_values("events", ascending=False)
+            )
+            worker_stats["total_duration_min"] = (worker_stats["total_duration_sec"] / 60.0).round(2)
+            worker_stats["avg_confidence"] = worker_stats["avg_confidence"].round(3)
+            st.dataframe(
+                worker_stats[["worker_id", "events", "zones_covered", "dominant_zone", "total_duration_min", "avg_confidence"]],
+                width="stretch",
+            )
+
+            st.write("**Матриця Worker x Zone (кількість подій)**")
+            worker_zone_matrix = pd.crosstab(df_stats["worker_id"], df_stats["zone"])
+            st.dataframe(worker_zone_matrix, width="stretch")
+
+        st.divider()
+
         st.write("**Останні цифрові події (Operations Log)**")
         query = "SELECT event_id, worker_id, task_classification, zone, timestamp_start, duration, confidence_score FROM operations_log ORDER BY timestamp_start DESC"
         recent_events = db.execute_query(query)
@@ -253,7 +331,6 @@ def show_observability_dashboard():
             df_events = pd.DataFrame(recent_events)
             if "task_classification" in df_events.columns:
                 df_events["task_classification"] = df_events["task_classification"].map(normalize_action_value)
-            # Розгортаємо таблицю на всю висоту, щоб прибрати внутрішній скрол.
             st.dataframe(df_events, width='stretch', height=600)
         else:
             st.info("Подій ще немає. Запустіть live-аналіз.")
@@ -308,6 +385,10 @@ def main():
 
     if "is_running" not in st.session_state:
         st.session_state.is_running = False
+    if "ui_yolo_confidence" not in st.session_state:
+        st.session_state.ui_yolo_confidence = float(worker_settings.yolo_confidence)
+    if "ui_rf_confidence_min" not in st.session_state:
+        st.session_state.ui_rf_confidence_min = 0.60
 
     col_video, col_controls = st.columns([3, 1])
 
@@ -324,6 +405,26 @@ def main():
             st.write("**ML класифікація:** резервний режим без ML 🟠")
             if rf_error:
                 st.caption(rf_error)
+
+        st.subheader("Пороги confidence")
+        ui_yolo_confidence = st.slider(
+            "YOLO confidence",
+            min_value=0.05,
+            max_value=0.95,
+            value=float(st.session_state.ui_yolo_confidence),
+            step=0.01,
+            help="Мінімальний confidence для детекцій YOLO.",
+        )
+        ui_rf_confidence_min = st.slider(
+            "RF confidence min",
+            min_value=0.05,
+            max_value=0.99,
+            value=float(st.session_state.ui_rf_confidence_min),
+            step=0.01,
+            help="Події логуються в БД лише якщо confidence RandomForest >= цього порогу.",
+        )
+        st.session_state.ui_yolo_confidence = float(ui_yolo_confidence)
+        st.session_state.ui_rf_confidence_min = float(ui_rf_confidence_min)
 
         if not st.session_state.is_running:
             if st.button("▶️ Почати live-аналіз", width="stretch"):
@@ -345,7 +446,15 @@ def main():
         video_placeholder = st.empty()
 
         if st.session_state.is_running:
-            process_live_stream(video_placeholder, worker_settings, app_settings, rf_model, effective_device)
+            process_live_stream(
+                video_placeholder,
+                worker_settings,
+                app_settings,
+                rf_model,
+                effective_device,
+                float(st.session_state.ui_yolo_confidence),
+                float(st.session_state.ui_rf_confidence_min),
+            )
         else:
             video_placeholder.info("Натисніть 'Почати live-аналіз' для запуску відеопотоку.")
 
