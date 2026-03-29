@@ -139,7 +139,7 @@ def main() -> None:
     settings = get_app_settings()
 
     st.set_page_config(page_title="Розмітка та навчання", layout="wide")
-    st.title("Інструмент навчання (День 3)")
+    st.title("Інструмент навчання")
 
     fps, video_frames, timeline_source = get_timeline_meta(settings)
 
@@ -153,7 +153,10 @@ def main() -> None:
     st.header("1. Розмітка дій")
 
     if settings.preview_video_path.exists():
-        st.video(str(settings.preview_video_path))
+        # Render the preview in a narrower central column to keep the video window smaller.
+        _, video_col, _ = st.columns([1, 6, 1])
+        with video_col:
+            st.video(str(settings.preview_video_path))
     else:
         st.error(f"Не можу знайти відео за шляхом: {settings.preview_video_path}")
 
@@ -168,8 +171,6 @@ def main() -> None:
             "Фічі довші за поточне preview-відео. Ймовірно, `features_temp_video_3.json` і `preview_with_ids.mp4` "
             "із різних запусків."
         )
-
-    st.divider()
 
     col1, col2, col3 = st.columns(3)
 
